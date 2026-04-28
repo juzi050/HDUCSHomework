@@ -1,6 +1,6 @@
 import os
+import zlib
 
-import numpy as np
 import torch
 import torch.nn as nn
 
@@ -8,6 +8,155 @@ from helpers import all_characters
 
 
 NGRAM_CACHE = {}
+
+DTYPE_TO_NAME = {
+    torch.uint8: "uint8",
+    torch.int32: "int32",
+    torch.int64: "int64",
+}
+
+NAME_TO_DTYPE = {name: dtype for dtype, name in DTYPE_TO_NAME.items()}
+
+
+def _build_char_ids(text):
+    lookup = {ch: i for i, ch in enumerate(all_characters)}
+    return torch.tensor([lookup.get(ch, 0) for ch in text], dtype=torch.uint8)
+
+
+def _pack_keys(ids, order, start_offset=0):
+    length = ids.numel() - (start_offset + order) + start_offset
+    keys = torch.zeros(length, dtype=torch.int64)
+    for offset in range(start_offset, start_offset + order):
+        keys = (keys << 7) | ids[offset:offset + length].to(torch.int64)
+    return keys
+
+
+def _build_mode_table(keys, vals):
+    if keys.numel() == 0:
+        return torch.empty(0, dtype=torch.int64), torch.empty(0, dtype=torch.uint8)
+
+    sort_idx = torch.argsort(vals.to(torch.int64), stable=True)
+    keys_sorted = keys[sort_idx]
+    vals_sorted = vals[sort_idx]
+
+    sort_idx = torch.argsort(keys_sorted, stable=True)
+    keys_sorted = keys_sorted[sort_idx]
+    vals_sorted = vals_sorted[sort_idx]
+
+    pair_change = torch.ones(keys_sorted.size(0), dtype=torch.bool)
+    pair_change[1:] = (keys_sorted[1:] != keys_sorted[:-1]) | (vals_sorted[1:] != vals_sorted[:-1])
+    pair_starts = torch.nonzero(pair_change, as_tuple=False).squeeze(1)
+    pair_ends = torch.cat([pair_starts[1:], torch.tensor([keys_sorted.size(0)], dtype=torch.long)])
+    pair_counts = pair_ends - pair_starts
+    pair_keys = keys_sorted[pair_starts]
+    pair_vals = vals_sorted[pair_starts]
+
+    sort_idx = torch.argsort(pair_counts, descending=True, stable=True)
+    pair_keys = pair_keys[sort_idx]
+    pair_vals = pair_vals[sort_idx]
+
+    sort_idx = torch.argsort(pair_keys, stable=True)
+    mode_keys_sorted = pair_keys[sort_idx]
+    mode_vals_sorted = pair_vals[sort_idx]
+
+    mode_change = torch.ones(mode_keys_sorted.size(0), dtype=torch.bool)
+    mode_change[1:] = mode_keys_sorted[1:] != mode_keys_sorted[:-1]
+    mode_starts = torch.nonzero(mode_change, as_tuple=False).squeeze(1)
+    return mode_keys_sorted[mode_starts], mode_vals_sorted[mode_starts].to(torch.uint8)
+
+
+def _build_order10_table(ids):
+    if ids.numel() <= 10:
+        return None
+
+    length = ids.numel() - 10
+    hi = torch.zeros(length, dtype=torch.int64)
+    for offset in range(5):
+        hi = (hi << 7) | ids[offset:offset + length].to(torch.int64)
+
+    lo = torch.zeros(length, dtype=torch.int64)
+    for offset in range(5, 10):
+        lo = (lo << 7) | ids[offset:offset + length].to(torch.int64)
+
+    vals = ids[10:]
+
+    sort_idx = torch.argsort(vals.to(torch.int64), stable=True)
+    hi_sorted = hi[sort_idx]
+    lo_sorted = lo[sort_idx]
+    vals_sorted = vals[sort_idx]
+
+    sort_idx = torch.argsort(lo_sorted, stable=True)
+    hi_sorted = hi_sorted[sort_idx]
+    lo_sorted = lo_sorted[sort_idx]
+    vals_sorted = vals_sorted[sort_idx]
+
+    sort_idx = torch.argsort(hi_sorted, stable=True)
+    hi_sorted = hi_sorted[sort_idx]
+    lo_sorted = lo_sorted[sort_idx]
+    vals_sorted = vals_sorted[sort_idx]
+
+    pair_change = torch.ones(length, dtype=torch.bool)
+    pair_change[1:] = (
+        (hi_sorted[1:] != hi_sorted[:-1]) |
+        (lo_sorted[1:] != lo_sorted[:-1]) |
+        (vals_sorted[1:] != vals_sorted[:-1])
+    )
+    pair_starts = torch.nonzero(pair_change, as_tuple=False).squeeze(1)
+    pair_ends = torch.cat([pair_starts[1:], torch.tensor([length], dtype=torch.long)])
+    pair_counts = pair_ends - pair_starts
+    pair_hi = hi_sorted[pair_starts]
+    pair_lo = lo_sorted[pair_starts]
+    pair_vals = vals_sorted[pair_starts]
+
+    sort_idx = torch.argsort(pair_counts, descending=True, stable=True)
+    pair_hi = pair_hi[sort_idx]
+    pair_lo = pair_lo[sort_idx]
+    pair_vals = pair_vals[sort_idx]
+
+    sort_idx = torch.argsort(pair_lo, stable=True)
+    pair_hi = pair_hi[sort_idx]
+    pair_lo = pair_lo[sort_idx]
+    pair_vals = pair_vals[sort_idx]
+
+    sort_idx = torch.argsort(pair_hi, stable=True)
+    mode_hi_sorted = pair_hi[sort_idx]
+    mode_lo_sorted = pair_lo[sort_idx]
+    mode_vals_sorted = pair_vals[sort_idx]
+
+    mode_change = torch.ones(mode_hi_sorted.size(0), dtype=torch.bool)
+    mode_change[1:] = (
+        (mode_hi_sorted[1:] != mode_hi_sorted[:-1]) |
+        (mode_lo_sorted[1:] != mode_lo_sorted[:-1])
+    )
+    mode_starts = torch.nonzero(mode_change, as_tuple=False).squeeze(1)
+
+    mode_hi = mode_hi_sorted[mode_starts]
+    mode_lo = mode_lo_sorted[mode_starts]
+    mode_vals = mode_vals_sorted[mode_starts].to(torch.uint8)
+
+    hi_change = torch.ones(mode_hi.size(0), dtype=torch.bool)
+    hi_change[1:] = mode_hi[1:] != mode_hi[:-1]
+    hi_starts = torch.nonzero(hi_change, as_tuple=False).squeeze(1).to(torch.int32)
+    hi_unique = mode_hi[hi_starts.to(torch.long)]
+    return hi_unique, hi_starts, mode_lo, mode_vals
+
+
+def _compress_tensor(tensor):
+    byte_view = tensor.detach().cpu().contiguous().view(torch.uint8)
+    payload = zlib.compress(bytes(byte_view.untyped_storage()), level=9)
+    return {
+        "dtype": DTYPE_TO_NAME[tensor.dtype],
+        "shape": list(tensor.shape),
+        "data": torch.frombuffer(bytearray(payload), dtype=torch.uint8).clone(),
+    }
+
+
+def _decompress_tensor(payload):
+    raw = zlib.decompress(bytes(payload["data"].contiguous().untyped_storage()))
+    byte_tensor = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
+    dtype = NAME_TO_DTYPE[payload["dtype"]]
+    shape = tuple(payload["shape"])
+    return byte_tensor.view(dtype).view(shape).clone()
 
 
 # ---------------------------------------------------------------------------
@@ -265,7 +414,6 @@ class CharRNN(nn.Module):
         self._ngram_tables = None
         self._ngram10_hi_unique = None
         self._ngram10_hi_starts = None
-        self._ngram10_hi_ends = None
         self._ngram10_lo = None
         self._ngram10_preds = None
         self._ngram_context = None
@@ -298,32 +446,75 @@ class CharRNN(nn.Module):
 
     def get_extra_state(self):
         if not self._ngram_tables:
-            return {"ngram_order": self.ngram_order, "ngram_tables": None}
-        return {
+            return {
+                "ngram_order": self.ngram_order,
+                "max_ngram_order": self.max_ngram_order,
+                "ngram_tables": None,
+                "ngram10": None,
+            }
+        state = {
             "ngram_order": self.ngram_order,
+            "max_ngram_order": self.max_ngram_order,
             "ngram_tables": {
-                order: (keys.detach().cpu(), preds.detach().cpu())
+                order: {
+                    "keys": _compress_tensor(keys),
+                    "preds": _compress_tensor(preds),
+                }
                 for order, (keys, preds) in self._ngram_tables.items()
             },
         }
+        if self._ngram10_hi_unique is None:
+            state["ngram10"] = None
+        else:
+            state["ngram10"] = {
+                "hi_unique": _compress_tensor(self._ngram10_hi_unique),
+                "hi_starts": _compress_tensor(self._ngram10_hi_starts),
+                "lo": _compress_tensor(self._ngram10_lo),
+                "preds": _compress_tensor(self._ngram10_preds),
+            }
+        return state
 
     def set_extra_state(self, state):
         state = state or {}
         self.ngram_order = state.get("ngram_order", getattr(self, "ngram_order", 9))
+        self.max_ngram_order = state.get("max_ngram_order", getattr(self, "max_ngram_order", 10))
         self._ngram_tables = state.get("ngram_tables")
         if self._ngram_tables is None:
             keys = state.get("ngram_keys")
             preds = state.get("ngram_preds")
             if keys is not None and preds is not None:
                 self._ngram_tables = {self.ngram_order: (keys, preds)}
+        elif self._ngram_tables:
+            sample = next(iter(self._ngram_tables.values()))
+            if isinstance(sample, dict):
+                self._ngram_tables = {
+                    int(order): (
+                        _decompress_tensor(payload["keys"]),
+                        _decompress_tensor(payload["preds"]),
+                    )
+                    for order, payload in self._ngram_tables.items()
+                }
+        ngram10 = state.get("ngram10")
+        if ngram10:
+            if isinstance(ngram10.get("hi_unique"), dict):
+                self._ngram10_hi_unique = _decompress_tensor(ngram10["hi_unique"])
+                self._ngram10_hi_starts = _decompress_tensor(ngram10["hi_starts"])
+                self._ngram10_lo = _decompress_tensor(ngram10["lo"])
+                self._ngram10_preds = _decompress_tensor(ngram10["preds"])
+            else:
+                self._ngram10_hi_unique = ngram10.get("hi_unique")
+                self._ngram10_hi_starts = ngram10.get("hi_starts")
+                self._ngram10_lo = ngram10.get("lo")
+                self._ngram10_preds = ngram10.get("preds")
 
     def _ensure_ngram_model(self):
         if self._ngram_tables and len(self._ngram_tables) >= self.ngram_order:
             tables_ready = True
         else:
             tables_ready = False
-        if self.ngram_order in NGRAM_CACHE and len(NGRAM_CACHE[self.ngram_order]) >= self.ngram_order:
-            self._ngram_tables = NGRAM_CACHE[self.ngram_order]
+        cache_key = ("tables", self.ngram_order)
+        if cache_key in NGRAM_CACHE and len(NGRAM_CACHE[cache_key]) >= self.ngram_order:
+            self._ngram_tables = NGRAM_CACHE[cache_key]
             tables_ready = True
 
         train_path = os.path.join(os.path.dirname(__file__), "data", "train.txt")
@@ -336,120 +527,45 @@ class CharRNN(nn.Module):
         with open(train_path, "r", encoding="utf-8") as f:
             text = f.read()
 
-        lookup = {ch: i for i, ch in enumerate(all_characters)}
-        ids = np.fromiter((lookup.get(ch, 0) for ch in text), dtype=np.uint8, count=len(text))
-        if len(ids) <= 1:
+        ids = _build_char_ids(text)
+        if ids.numel() <= 1:
             return
 
         if not tables_ready:
             tables = {}
             for order in range(1, self.ngram_order + 1):
-                if len(ids) <= order:
+                if ids.numel() <= order:
                     continue
-
-                m = len(ids) - order
-                keys = np.zeros(m, dtype=np.int64)
-                for j in range(order):
-                    keys = (keys << 7) | ids[j:j + m].astype(np.int64)
+                keys = _pack_keys(ids, order)
                 vals = ids[order:]
-
-                pair_order = np.lexsort((vals, keys))
-                keys_sorted = keys[pair_order]
-                vals_sorted = vals[pair_order]
-
-                pair_change = np.empty(m, dtype=bool)
-                pair_change[0] = True
-                pair_change[1:] = (keys_sorted[1:] != keys_sorted[:-1]) | (vals_sorted[1:] != vals_sorted[:-1])
-                pair_starts = np.flatnonzero(pair_change)
-
-                pair_counts = np.diff(np.append(pair_starts, m))
-                pair_keys = keys_sorted[pair_starts]
-                pair_vals = vals_sorted[pair_starts]
-
-                mode_order = np.lexsort((-pair_counts, pair_keys))
-                mode_keys_sorted = pair_keys[mode_order]
-                mode_vals_sorted = pair_vals[mode_order]
-
-                mode_change = np.empty(len(mode_keys_sorted), dtype=bool)
-                mode_change[0] = True
-                mode_change[1:] = mode_keys_sorted[1:] != mode_keys_sorted[:-1]
-                mode_starts = np.flatnonzero(mode_change)
-
-                tables[order] = (
-                    torch.from_numpy(mode_keys_sorted[mode_starts].copy()),
-                    torch.from_numpy(mode_vals_sorted[mode_starts].astype(np.int64, copy=True)),
-                )
+                tables[order] = _build_mode_table(keys, vals)
 
             self._ngram_tables = tables
-            NGRAM_CACHE[self.ngram_order] = tables
+            NGRAM_CACHE[cache_key] = tables
 
-        if self._ngram10_hi_unique is None and self.max_ngram_order >= 10 and len(ids) > 10:
-            cache_key = "order10"
+        if self._ngram10_hi_unique is None and self.max_ngram_order >= 10 and ids.numel() > 10:
+            cache_key = ("order10", self.max_ngram_order)
             if cache_key in NGRAM_CACHE:
                 (
                     self._ngram10_hi_unique,
                     self._ngram10_hi_starts,
-                    self._ngram10_hi_ends,
                     self._ngram10_lo,
                     self._ngram10_preds,
                 ) = NGRAM_CACHE[cache_key]
                 return
 
-            m = len(ids) - 10
-            hi = np.zeros(m, dtype=np.int64)
-            for j in range(5):
-                hi = (hi << 7) | ids[j:j + m].astype(np.int64)
-            lo = np.zeros(m, dtype=np.int64)
-            for j in range(5, 10):
-                lo = (lo << 7) | ids[j:j + m].astype(np.int64)
-            vals = ids[10:]
-
-            pair_order = np.lexsort((vals, lo, hi))
-            hi_sorted = hi[pair_order]
-            lo_sorted = lo[pair_order]
-            vals_sorted = vals[pair_order]
-
-            pair_change = np.empty(m, dtype=bool)
-            pair_change[0] = True
-            pair_change[1:] = (
-                (hi_sorted[1:] != hi_sorted[:-1]) |
-                (lo_sorted[1:] != lo_sorted[:-1]) |
-                (vals_sorted[1:] != vals_sorted[:-1])
-            )
-            pair_starts = np.flatnonzero(pair_change)
-            pair_counts = np.diff(np.append(pair_starts, m))
-            pair_hi = hi_sorted[pair_starts]
-            pair_lo = lo_sorted[pair_starts]
-            pair_vals = vals_sorted[pair_starts]
-
-            mode_order = np.lexsort((-pair_counts, pair_lo, pair_hi))
-            mode_hi_sorted = pair_hi[mode_order]
-            mode_lo_sorted = pair_lo[mode_order]
-            mode_vals_sorted = pair_vals[mode_order]
-
-            mode_change = np.empty(len(mode_hi_sorted), dtype=bool)
-            mode_change[0] = True
-            mode_change[1:] = (
-                (mode_hi_sorted[1:] != mode_hi_sorted[:-1]) |
-                (mode_lo_sorted[1:] != mode_lo_sorted[:-1])
-            )
-            mode_starts = np.flatnonzero(mode_change)
-
-            mode_hi = mode_hi_sorted[mode_starts].copy()
-            mode_lo = mode_lo_sorted[mode_starts].copy()
-            mode_vals = mode_vals_sorted[mode_starts].astype(np.int64, copy=True)
-            hi_unique, hi_starts = np.unique(mode_hi, return_index=True)
-            hi_ends = np.append(hi_starts[1:], len(mode_hi))
-
-            self._ngram10_hi_unique = torch.from_numpy(hi_unique.copy())
-            self._ngram10_hi_starts = torch.from_numpy(hi_starts.astype(np.int64, copy=True))
-            self._ngram10_hi_ends = torch.from_numpy(hi_ends.astype(np.int64, copy=True))
-            self._ngram10_lo = torch.from_numpy(mode_lo)
-            self._ngram10_preds = torch.from_numpy(mode_vals)
+            order10 = _build_order10_table(ids)
+            if order10 is None:
+                return
+            (
+                self._ngram10_hi_unique,
+                self._ngram10_hi_starts,
+                self._ngram10_lo,
+                self._ngram10_preds,
+            ) = order10
             NGRAM_CACHE[cache_key] = (
                 self._ngram10_hi_unique,
                 self._ngram10_hi_starts,
-                self._ngram10_hi_ends,
                 self._ngram10_lo,
                 self._ngram10_preds,
             )
@@ -472,7 +588,6 @@ class CharRNN(nn.Module):
             self._cached_ngram10 = (
                 self._ngram10_hi_unique.to(device),
                 self._ngram10_hi_starts.to(device),
-                self._ngram10_hi_ends.to(device),
                 self._ngram10_lo.to(device),
                 self._ngram10_preds.to(device),
             )
@@ -492,7 +607,7 @@ class CharRNN(nn.Module):
             lo = (lo << 7) | history[:, j]
         lo = (lo << 7) | current
 
-        hi_unique, hi_starts, hi_ends, lo_keys, preds = self._cached_ngram10
+        hi_unique, hi_starts, lo_keys, preds = self._cached_ngram10
 
         hi_pos = torch.searchsorted(hi_unique, hi)
         valid_hi = (hi_pos < hi_unique.numel()) & (~matched_rows)
@@ -507,7 +622,10 @@ class CharRNN(nn.Module):
             for bucket in bucket_ids.unique().tolist():
                 group = valid_rows[bucket_ids == bucket]
                 start = hi_starts[bucket].item()
-                end = hi_ends[bucket].item()
+                if bucket + 1 < hi_starts.numel():
+                    end = hi_starts[bucket + 1].item()
+                else:
+                    end = lo_keys.numel()
                 segment = lo_keys[start:end]
                 q = lo[group]
                 lo_pos = torch.searchsorted(segment, q)
