@@ -13,7 +13,14 @@ class RNNCell(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.W_ih = nn.Linear(input_size, hidden_size)
-        self.W_hh = nn.Linear(hidden_size, hidden_size)
+        self.W_hh = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.norm = nn.LayerNorm(hidden_size)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.W_ih.weight)
+        nn.init.zeros_(self.W_ih.bias)
+        nn.init.orthogonal_(self.W_hh.weight)
 
     def forward(self, x, h):
         """
@@ -21,7 +28,7 @@ class RNNCell(nn.Module):
         h : (batch, hidden_size)
         返回 h_next : (batch, hidden_size)
         """
-        return torch.tanh(self.W_ih(x) + self.W_hh(h))
+        return torch.tanh(self.norm(self.W_ih(x) + self.W_hh(h)))
 
 
 class LSTMCell(nn.Module):
@@ -32,7 +39,17 @@ class LSTMCell(nn.Module):
         self.hidden_size = hidden_size
         # 四个门共用一个大线性层，顺序为 i, f, g, o
         self.W_ih = nn.Linear(input_size, 4 * hidden_size)
-        self.W_hh = nn.Linear(hidden_size, 4 * hidden_size)
+        self.W_hh = nn.Linear(hidden_size, 4 * hidden_size, bias=False)
+        self.gate_norm = nn.LayerNorm(4 * hidden_size)
+        self.cell_norm = nn.LayerNorm(hidden_size)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.W_ih.weight)
+        nn.init.zeros_(self.W_ih.bias)
+        nn.init.orthogonal_(self.W_hh.weight)
+        with torch.no_grad():
+            self.W_ih.bias[self.hidden_size:2 * self.hidden_size].fill_(1.0)
 
     def forward(self, x, state):
         """
@@ -41,7 +58,7 @@ class LSTMCell(nn.Module):
         返回   : tuple( h_next, c_next )
         """
         h, c = state
-        gates = self.W_ih(x) + self.W_hh(h)
+        gates = self.gate_norm(self.W_ih(x) + self.W_hh(h))
         i, f, g, o = gates.chunk(4, dim=1)
         i = torch.sigmoid(i)
         f = torch.sigmoid(f)
@@ -49,7 +66,7 @@ class LSTMCell(nn.Module):
         o = torch.sigmoid(o)
 
         c_next = f * c + i * g
-        h_next = o * torch.tanh(c_next)
+        h_next = o * torch.tanh(self.cell_norm(c_next))
         return h_next, c_next
 
 
@@ -60,9 +77,22 @@ class GRUCell(nn.Module):
         super().__init__()
         self.hidden_size = hidden_size
         self.W_rz_ih = nn.Linear(input_size, 2 * hidden_size)
-        self.W_rz_hh = nn.Linear(hidden_size, 2 * hidden_size)
+        self.W_rz_hh = nn.Linear(hidden_size, 2 * hidden_size, bias=False)
         self.W_n_ih = nn.Linear(input_size, hidden_size)
-        self.W_n_hh = nn.Linear(hidden_size, hidden_size)
+        self.W_n_hh = nn.Linear(hidden_size, hidden_size, bias=False)
+        self.rz_norm = nn.LayerNorm(2 * hidden_size)
+        self.n_norm = nn.LayerNorm(hidden_size)
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.xavier_uniform_(self.W_rz_ih.weight)
+        nn.init.zeros_(self.W_rz_ih.bias)
+        nn.init.xavier_uniform_(self.W_n_ih.weight)
+        nn.init.zeros_(self.W_n_ih.bias)
+        nn.init.orthogonal_(self.W_rz_hh.weight)
+        nn.init.orthogonal_(self.W_n_hh.weight)
+        with torch.no_grad():
+            self.W_rz_ih.bias[self.hidden_size:].fill_(1.0)
 
     def forward(self, x, h):
         """
@@ -70,12 +100,12 @@ class GRUCell(nn.Module):
         h : (batch, hidden_size)
         返回 h_next : (batch, hidden_size)
         """
-        rz = self.W_rz_ih(x) + self.W_rz_hh(h)
+        rz = self.rz_norm(self.W_rz_ih(x) + self.W_rz_hh(h))
         r, z = rz.chunk(2, dim=1)
         r = torch.sigmoid(r)
         z = torch.sigmoid(z)
 
-        n = torch.tanh(self.W_n_ih(x) + r * self.W_n_hh(h))
+        n = torch.tanh(self.n_norm(self.W_n_ih(x) + r * self.W_n_hh(h)))
         return (1 - z) * n + z * h
 
 
@@ -109,8 +139,11 @@ class StackedRNN(nn.Module):
         for t in range(seq_len):
             x = x_seq[t]                         # (batch, input_size)
             for layer, cell in enumerate(self.cells):
+                residual = x
                 h[layer] = cell(x, h[layer])
                 x = h[layer]
+                if layer > 0:
+                    x = x + residual
                 if self.dropout is not None and layer < self.n_layers - 1:
                     x = self.dropout(x)
             outputs.append(h[-1].unsqueeze(0))   # (1, batch, hidden)
@@ -146,8 +179,11 @@ class StackedLSTM(nn.Module):
         for t in range(seq_len):
             x = x_seq[t]
             for layer, cell in enumerate(self.cells):
+                residual = x
                 h[layer], c[layer] = cell(x, (h[layer], c[layer]))
                 x = h[layer]
+                if layer > 0:
+                    x = x + residual
                 if self.dropout is not None and layer < self.n_layers - 1:
                     x = self.dropout(x)
             outputs.append(h[-1].unsqueeze(0))
@@ -182,8 +218,11 @@ class StackedGRU(nn.Module):
         for t in range(seq_len):
             x = x_seq[t]
             for layer, cell in enumerate(self.cells):
+                residual = x
                 h[layer] = cell(x, h[layer])
                 x = h[layer]
+                if layer > 0:
+                    x = x + residual
                 if self.dropout is not None and layer < self.n_layers - 1:
                     x = self.dropout(x)
             outputs.append(h[-1].unsqueeze(0))
@@ -209,9 +248,11 @@ class CharRNN(nn.Module):
         self.model = model.lower()
         self.hidden_size = hidden_size
         self.n_layers = n_layers
-        dropout = kwargs.get("dropout", 0.0)
+        dropout = kwargs.get("dropout", 0.1)
+        input_dropout = kwargs.get("input_dropout", 0.1)
 
         self.encoder = nn.Embedding(input_size, hidden_size)
+        self.input_dropout = nn.Dropout(input_dropout)
 
         if self.model == "lstm":
             self.rnn = StackedLSTM(hidden_size, hidden_size, n_layers, dropout=dropout)
@@ -222,7 +263,15 @@ class CharRNN(nn.Module):
         else:
             raise ValueError(f"Unsupported model type: {model}")
 
+        self.output_norm = nn.LayerNorm(hidden_size)
         self.decoder = nn.Linear(hidden_size, output_size)
+        if input_size == output_size:
+            self.decoder.weight = self.encoder.weight
+        self.reset_parameters()
+
+    def reset_parameters(self):
+        nn.init.normal_(self.encoder.weight, mean=0.0, std=0.1)
+        nn.init.zeros_(self.decoder.bias)
 
     def forward(self, input, hidden):
         # 统一接口：input 可为 (batch,) 或 (batch, seq_len)
@@ -230,7 +279,7 @@ class CharRNN(nn.Module):
             input = input.unsqueeze(1)
 
         batch_size, seq_len = input.size()
-        encoded = self.encoder(input)
+        encoded = self.input_dropout(self.encoder(input))
 
         # 手写 RNN 同样期望 (seq_len, batch, hidden)
         encoded = encoded.transpose(0, 1)
@@ -239,7 +288,7 @@ class CharRNN(nn.Module):
         # output: (seq_len, batch, hidden)
         output = output.transpose(0, 1).contiguous().view(batch_size * seq_len, self.hidden_size)
 
-        output = self.decoder(output)
+        output = self.decoder(self.output_norm(output))
         return output, hidden
 
     def init_hidden(self, batch_size):
