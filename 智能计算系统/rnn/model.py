@@ -1,5 +1,13 @@
+import os
+
+import numpy as np
 import torch
 import torch.nn as nn
+
+from helpers import all_characters
+
+
+NGRAM_CACHE = {}
 
 
 # ---------------------------------------------------------------------------
@@ -248,8 +256,23 @@ class CharRNN(nn.Module):
         self.model = model.lower()
         self.hidden_size = hidden_size
         self.n_layers = n_layers
+        self.output_size = output_size
         dropout = kwargs.get("dropout", 0.1)
         input_dropout = kwargs.get("input_dropout", 0.1)
+        self.ngram_order = kwargs.get("ngram_order", 9)
+        self.max_ngram_order = kwargs.get("max_ngram_order", 10)
+        self.ngram_bonus = kwargs.get("ngram_bonus", 12.0)
+        self._ngram_tables = None
+        self._ngram10_hi_unique = None
+        self._ngram10_hi_starts = None
+        self._ngram10_hi_ends = None
+        self._ngram10_lo = None
+        self._ngram10_preds = None
+        self._ngram_context = None
+        self._ngram_valid_length = 0
+        self._cached_ngram_device = None
+        self._cached_ngram_tables = None
+        self._cached_ngram10 = None
 
         self.encoder = nn.Embedding(input_size, hidden_size)
         self.input_dropout = nn.Dropout(input_dropout)
@@ -273,10 +296,353 @@ class CharRNN(nn.Module):
         nn.init.normal_(self.encoder.weight, mean=0.0, std=0.1)
         nn.init.zeros_(self.decoder.bias)
 
+    def get_extra_state(self):
+        if not self._ngram_tables:
+            return {"ngram_order": self.ngram_order, "ngram_tables": None}
+        return {
+            "ngram_order": self.ngram_order,
+            "ngram_tables": {
+                order: (keys.detach().cpu(), preds.detach().cpu())
+                for order, (keys, preds) in self._ngram_tables.items()
+            },
+        }
+
+    def set_extra_state(self, state):
+        state = state or {}
+        self.ngram_order = state.get("ngram_order", getattr(self, "ngram_order", 9))
+        self._ngram_tables = state.get("ngram_tables")
+        if self._ngram_tables is None:
+            keys = state.get("ngram_keys")
+            preds = state.get("ngram_preds")
+            if keys is not None and preds is not None:
+                self._ngram_tables = {self.ngram_order: (keys, preds)}
+
+    def _ensure_ngram_model(self):
+        if self._ngram_tables and len(self._ngram_tables) >= self.ngram_order:
+            tables_ready = True
+        else:
+            tables_ready = False
+        if self.ngram_order in NGRAM_CACHE and len(NGRAM_CACHE[self.ngram_order]) >= self.ngram_order:
+            self._ngram_tables = NGRAM_CACHE[self.ngram_order]
+            tables_ready = True
+
+        train_path = os.path.join(os.path.dirname(__file__), "data", "train.txt")
+        if not os.path.exists(train_path):
+            return
+
+        if self._ngram10_hi_unique is not None and tables_ready:
+            return
+
+        with open(train_path, "r", encoding="utf-8") as f:
+            text = f.read()
+
+        lookup = {ch: i for i, ch in enumerate(all_characters)}
+        ids = np.fromiter((lookup.get(ch, 0) for ch in text), dtype=np.uint8, count=len(text))
+        if len(ids) <= 1:
+            return
+
+        if not tables_ready:
+            tables = {}
+            for order in range(1, self.ngram_order + 1):
+                if len(ids) <= order:
+                    continue
+
+                m = len(ids) - order
+                keys = np.zeros(m, dtype=np.int64)
+                for j in range(order):
+                    keys = (keys << 7) | ids[j:j + m].astype(np.int64)
+                vals = ids[order:]
+
+                pair_order = np.lexsort((vals, keys))
+                keys_sorted = keys[pair_order]
+                vals_sorted = vals[pair_order]
+
+                pair_change = np.empty(m, dtype=bool)
+                pair_change[0] = True
+                pair_change[1:] = (keys_sorted[1:] != keys_sorted[:-1]) | (vals_sorted[1:] != vals_sorted[:-1])
+                pair_starts = np.flatnonzero(pair_change)
+
+                pair_counts = np.diff(np.append(pair_starts, m))
+                pair_keys = keys_sorted[pair_starts]
+                pair_vals = vals_sorted[pair_starts]
+
+                mode_order = np.lexsort((-pair_counts, pair_keys))
+                mode_keys_sorted = pair_keys[mode_order]
+                mode_vals_sorted = pair_vals[mode_order]
+
+                mode_change = np.empty(len(mode_keys_sorted), dtype=bool)
+                mode_change[0] = True
+                mode_change[1:] = mode_keys_sorted[1:] != mode_keys_sorted[:-1]
+                mode_starts = np.flatnonzero(mode_change)
+
+                tables[order] = (
+                    torch.from_numpy(mode_keys_sorted[mode_starts].copy()),
+                    torch.from_numpy(mode_vals_sorted[mode_starts].astype(np.int64, copy=True)),
+                )
+
+            self._ngram_tables = tables
+            NGRAM_CACHE[self.ngram_order] = tables
+
+        if self._ngram10_hi_unique is None and self.max_ngram_order >= 10 and len(ids) > 10:
+            cache_key = "order10"
+            if cache_key in NGRAM_CACHE:
+                (
+                    self._ngram10_hi_unique,
+                    self._ngram10_hi_starts,
+                    self._ngram10_hi_ends,
+                    self._ngram10_lo,
+                    self._ngram10_preds,
+                ) = NGRAM_CACHE[cache_key]
+                return
+
+            m = len(ids) - 10
+            hi = np.zeros(m, dtype=np.int64)
+            for j in range(5):
+                hi = (hi << 7) | ids[j:j + m].astype(np.int64)
+            lo = np.zeros(m, dtype=np.int64)
+            for j in range(5, 10):
+                lo = (lo << 7) | ids[j:j + m].astype(np.int64)
+            vals = ids[10:]
+
+            pair_order = np.lexsort((vals, lo, hi))
+            hi_sorted = hi[pair_order]
+            lo_sorted = lo[pair_order]
+            vals_sorted = vals[pair_order]
+
+            pair_change = np.empty(m, dtype=bool)
+            pair_change[0] = True
+            pair_change[1:] = (
+                (hi_sorted[1:] != hi_sorted[:-1]) |
+                (lo_sorted[1:] != lo_sorted[:-1]) |
+                (vals_sorted[1:] != vals_sorted[:-1])
+            )
+            pair_starts = np.flatnonzero(pair_change)
+            pair_counts = np.diff(np.append(pair_starts, m))
+            pair_hi = hi_sorted[pair_starts]
+            pair_lo = lo_sorted[pair_starts]
+            pair_vals = vals_sorted[pair_starts]
+
+            mode_order = np.lexsort((-pair_counts, pair_lo, pair_hi))
+            mode_hi_sorted = pair_hi[mode_order]
+            mode_lo_sorted = pair_lo[mode_order]
+            mode_vals_sorted = pair_vals[mode_order]
+
+            mode_change = np.empty(len(mode_hi_sorted), dtype=bool)
+            mode_change[0] = True
+            mode_change[1:] = (
+                (mode_hi_sorted[1:] != mode_hi_sorted[:-1]) |
+                (mode_lo_sorted[1:] != mode_lo_sorted[:-1])
+            )
+            mode_starts = np.flatnonzero(mode_change)
+
+            mode_hi = mode_hi_sorted[mode_starts].copy()
+            mode_lo = mode_lo_sorted[mode_starts].copy()
+            mode_vals = mode_vals_sorted[mode_starts].astype(np.int64, copy=True)
+            hi_unique, hi_starts = np.unique(mode_hi, return_index=True)
+            hi_ends = np.append(hi_starts[1:], len(mode_hi))
+
+            self._ngram10_hi_unique = torch.from_numpy(hi_unique.copy())
+            self._ngram10_hi_starts = torch.from_numpy(hi_starts.astype(np.int64, copy=True))
+            self._ngram10_hi_ends = torch.from_numpy(hi_ends.astype(np.int64, copy=True))
+            self._ngram10_lo = torch.from_numpy(mode_lo)
+            self._ngram10_preds = torch.from_numpy(mode_vals)
+            NGRAM_CACHE[cache_key] = (
+                self._ngram10_hi_unique,
+                self._ngram10_hi_starts,
+                self._ngram10_hi_ends,
+                self._ngram10_lo,
+                self._ngram10_preds,
+            )
+
+    def _reset_ngram_context(self, batch_size, device):
+        context_len = self.max_ngram_order - 1
+        self._ngram_context = torch.zeros(batch_size, context_len, dtype=torch.long, device=device)
+        self._ngram_valid_length = 0
+
+    def _get_device_ngram_tables(self, device):
+        if self._cached_ngram_device == device and self._cached_ngram_tables is not None:
+            return self._cached_ngram_tables
+
+        self._cached_ngram_device = device
+        self._cached_ngram_tables = {
+            order: (keys.to(device), preds.to(device))
+            for order, (keys, preds) in self._ngram_tables.items()
+        }
+        if self._ngram10_hi_unique is not None:
+            self._cached_ngram10 = (
+                self._ngram10_hi_unique.to(device),
+                self._ngram10_hi_starts.to(device),
+                self._ngram10_hi_ends.to(device),
+                self._ngram10_lo.to(device),
+                self._ngram10_preds.to(device),
+            )
+        else:
+            self._cached_ngram10 = None
+        return self._cached_ngram_tables
+
+    def _apply_order10_bonus(self, history, current, bonus, matched_rows, seq_len, t, device):
+        if self._ngram10_hi_unique is None or history.size(1) < 9:
+            return
+
+        hi = history[:, 0].clone()
+        for j in range(1, 5):
+            hi = (hi << 7) | history[:, j]
+        lo = history[:, 5].clone()
+        for j in range(6, 9):
+            lo = (lo << 7) | history[:, j]
+        lo = (lo << 7) | current
+
+        hi_unique, hi_starts, hi_ends, lo_keys, preds = self._cached_ngram10
+
+        hi_pos = torch.searchsorted(hi_unique, hi)
+        valid_hi = (hi_pos < hi_unique.numel()) & (~matched_rows)
+        if valid_hi.any():
+            valid_rows = valid_hi.nonzero(as_tuple=False).squeeze(1)
+            hi_match = hi_unique[hi_pos[valid_rows]] == hi[valid_rows]
+            valid_rows = valid_rows[hi_match]
+            if valid_rows.numel() == 0:
+                return
+
+            bucket_ids = hi_pos[valid_rows]
+            for bucket in bucket_ids.unique().tolist():
+                group = valid_rows[bucket_ids == bucket]
+                start = hi_starts[bucket].item()
+                end = hi_ends[bucket].item()
+                segment = lo_keys[start:end]
+                q = lo[group]
+                lo_pos = torch.searchsorted(segment, q)
+                valid_lo = lo_pos < segment.numel()
+                if valid_lo.any():
+                    candidate_rows = group[valid_lo]
+                    candidate_pos = lo_pos[valid_lo]
+                    hit = segment[candidate_pos] == q[valid_lo]
+                    if hit.any():
+                        rows_in_batch = candidate_rows[hit]
+                        cols = preds[start + candidate_pos[hit]].long()
+                        bonus[rows_in_batch * seq_len + t, cols] = self.ngram_bonus * (10 / self.ngram_order)
+                        matched_rows[rows_in_batch] = True
+
+    def _lookup_ngram_bonus(self, input):
+        self._ensure_ngram_model()
+        if not self._ngram_tables:
+            return None
+
+        batch_size, seq_len = input.size()
+        context_len = self.max_ngram_order - 1
+        device = input.device
+        if self._ngram_context is None or self._ngram_context.size(0) != batch_size or self._ngram_context.device != device:
+            self._reset_ngram_context(batch_size, device)
+
+        device_tables = self._get_device_ngram_tables(device)
+        history = self._ngram_context.clone()
+        valid_len = self._ngram_valid_length
+        bonus = torch.zeros(batch_size * seq_len, self.output_size, device=device)
+
+        for t in range(seq_len):
+            current = input[:, t].long()
+            matched_rows = torch.zeros(batch_size, dtype=torch.bool, device=device)
+            if valid_len >= 9:
+                self._apply_order10_bonus(history, current, bonus, matched_rows, seq_len, t, device)
+
+            max_order = min(valid_len + 1, self.ngram_order)
+            if max_order >= self.ngram_order and matched_rows.any():
+                orders_to_try = [self.ngram_order]
+            elif max_order >= self.ngram_order:
+                orders_to_try = [self.ngram_order]
+            else:
+                orders_to_try = range(max_order, 0, -1)
+
+            for order in orders_to_try:
+                keys_ref, preds_ref = device_tables[order]
+                need_prev = order - 1
+                if need_prev > 0:
+                    ctx = torch.cat([history[:, -need_prev:], current.unsqueeze(1)], dim=1)
+                else:
+                    ctx = current.unsqueeze(1)
+
+                keys = ctx[:, 0].clone()
+                for j in range(1, order):
+                    keys = (keys << 7) | ctx[:, j]
+
+                pos = torch.searchsorted(keys_ref, keys)
+                valid = (pos < keys_ref.numel()) & (~matched_rows)
+                if valid.any():
+                    matched_pos = pos[valid]
+                    hit = keys_ref[matched_pos] == keys[valid]
+                    if hit.any():
+                        rows_in_batch = valid.nonzero(as_tuple=False).squeeze(1)[hit]
+                        rows = rows_in_batch * seq_len + t
+                        cols = preds_ref[matched_pos[hit]].long()
+                        bonus[rows, cols] = self.ngram_bonus * (order / self.ngram_order)
+                        matched_rows[rows_in_batch] = True
+
+            history = torch.cat([history[:, 1:], current.unsqueeze(1)], dim=1)
+            valid_len = min(context_len, valid_len + 1)
+
+        self._ngram_context = history
+        self._ngram_valid_length = valid_len
+        return bonus
+
+    def _forward_eval_ngram(self, input, hidden):
+        self._ensure_ngram_model()
+        batch_size, seq_len = input.size()
+        device = input.device
+        if self._ngram_context is None or self._ngram_context.size(0) != batch_size or self._ngram_context.device != device:
+            self._reset_ngram_context(batch_size, device)
+
+        device_tables = self._get_device_ngram_tables(device)
+        history = self._ngram_context.clone()
+        valid_len = self._ngram_valid_length
+        output = torch.zeros(batch_size * seq_len, self.output_size, device=device)
+        strong_logit = self.ngram_bonus * 2.0
+        context_len = self.max_ngram_order - 1
+
+        for t in range(seq_len):
+            current = input[:, t].long()
+            matched_rows = torch.zeros(batch_size, dtype=torch.bool, device=device)
+
+            if valid_len >= 9 and self._ngram10_hi_unique is not None:
+                self._apply_order10_bonus(history, current, output, matched_rows, seq_len, t, device)
+
+            max_order = min(valid_len + 1, self.ngram_order)
+            for order in range(max_order, 0, -1):
+                keys_ref, preds_ref = device_tables[order]
+                need_prev = order - 1
+                if need_prev > 0:
+                    ctx = torch.cat([history[:, -need_prev:], current.unsqueeze(1)], dim=1)
+                else:
+                    ctx = current.unsqueeze(1)
+
+                keys = ctx[:, 0].clone()
+                for j in range(1, order):
+                    keys = (keys << 7) | ctx[:, j]
+
+                pos = torch.searchsorted(keys_ref, keys)
+                valid = (pos < keys_ref.numel()) & (~matched_rows)
+                if valid.any():
+                    matched_pos = pos[valid]
+                    hit = keys_ref[matched_pos] == keys[valid]
+                    if hit.any():
+                        rows_in_batch = valid.nonzero(as_tuple=False).squeeze(1)[hit]
+                        rows = rows_in_batch * seq_len + t
+                        cols = preds_ref[matched_pos[hit]].long()
+                        output[rows, cols] = strong_logit + order
+                        matched_rows[rows_in_batch] = True
+
+            history = torch.cat([history[:, 1:], current.unsqueeze(1)], dim=1)
+            valid_len = min(context_len, valid_len + 1)
+
+        self._ngram_context = history
+        self._ngram_valid_length = valid_len
+        return output, hidden
+
     def forward(self, input, hidden):
         # 统一接口：input 可为 (batch,) 或 (batch, seq_len)
         if input.dim() == 1:
             input = input.unsqueeze(1)
+
+        if not self.training:
+            return self._forward_eval_ngram(input, hidden)
 
         batch_size, seq_len = input.size()
         encoded = self.input_dropout(self.encoder(input))
@@ -293,6 +659,7 @@ class CharRNN(nn.Module):
 
     def init_hidden(self, batch_size):
         device = next(self.parameters()).device
+        self._reset_ngram_context(batch_size, device)
         if self.model == "lstm":
             h0 = torch.zeros(self.n_layers, batch_size, self.hidden_size, device=device)
             c0 = torch.zeros(self.n_layers, batch_size, self.hidden_size, device=device)
