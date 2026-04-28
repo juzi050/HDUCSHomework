@@ -12,9 +12,8 @@ class RNNCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()
         self.hidden_size = hidden_size
-        # TODO: 定义输入→隐层和隐层→隐层的线性变换
-        self.W_ih = None
-        self.W_hh = None
+        self.W_ih = nn.Linear(input_size, hidden_size)
+        self.W_hh = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, x, h):
         """
@@ -22,8 +21,7 @@ class RNNCell(nn.Module):
         h : (batch, hidden_size)
         返回 h_next : (batch, hidden_size)
         """
-        # TODO: 实现 Elman RNN 更新公式
-        raise NotImplementedError
+        return torch.tanh(self.W_ih(x) + self.W_hh(h))
 
 
 class LSTMCell(nn.Module):
@@ -32,10 +30,9 @@ class LSTMCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()
         self.hidden_size = hidden_size
-        # TODO: 四个门共用一个大线性层，输出维度为 4 * hidden_size
-        # 顺序：input gate, forget gate, cell gate, output gate
-        self.W_ih = None
-        self.W_hh = None
+        # 四个门共用一个大线性层，顺序为 i, f, g, o
+        self.W_ih = nn.Linear(input_size, 4 * hidden_size)
+        self.W_hh = nn.Linear(hidden_size, 4 * hidden_size)
 
     def forward(self, x, state):
         """
@@ -44,8 +41,16 @@ class LSTMCell(nn.Module):
         返回   : tuple( h_next, c_next )
         """
         h, c = state
-        # TODO: 计算四个门，更新 c 和 h
-        raise NotImplementedError
+        gates = self.W_ih(x) + self.W_hh(h)
+        i, f, g, o = gates.chunk(4, dim=1)
+        i = torch.sigmoid(i)
+        f = torch.sigmoid(f)
+        g = torch.tanh(g)
+        o = torch.sigmoid(o)
+
+        c_next = f * c + i * g
+        h_next = o * torch.tanh(c_next)
+        return h_next, c_next
 
 
 class GRUCell(nn.Module):
@@ -54,12 +59,10 @@ class GRUCell(nn.Module):
     def __init__(self, input_size, hidden_size):
         super().__init__()
         self.hidden_size = hidden_size
-        # TODO: reset gate 和 update gate 共用一个线性层（2 * hidden_size）
-        self.W_rz_ih = None
-        self.W_rz_hh = None
-        # TODO: 候选隐状态的线性层
-        self.W_n_ih = None
-        self.W_n_hh = None
+        self.W_rz_ih = nn.Linear(input_size, 2 * hidden_size)
+        self.W_rz_hh = nn.Linear(hidden_size, 2 * hidden_size)
+        self.W_n_ih = nn.Linear(input_size, hidden_size)
+        self.W_n_hh = nn.Linear(hidden_size, hidden_size)
 
     def forward(self, x, h):
         """
@@ -67,8 +70,13 @@ class GRUCell(nn.Module):
         h : (batch, hidden_size)
         返回 h_next : (batch, hidden_size)
         """
-        # TODO: 计算 reset gate、update gate 和候选隐状态，更新 h
-        raise NotImplementedError
+        rz = self.W_rz_ih(x) + self.W_rz_hh(h)
+        r, z = rz.chunk(2, dim=1)
+        r = torch.sigmoid(r)
+        z = torch.sigmoid(z)
+
+        n = torch.tanh(self.W_n_ih(x) + r * self.W_n_hh(h))
+        return (1 - z) * n + z * h
 
 
 # ---------------------------------------------------------------------------
@@ -196,53 +204,48 @@ class CharRNN(nn.Module):
         init_hidden(batch_size) -> hidden
     """
 
-    def __init__(self, input_size, output_size, hidden_size=128, model="lstm", n_layers=2):
+    def __init__(self, input_size, output_size, hidden_size=128, model="gru", n_layers=2, **kwargs):
         super().__init__()
         self.model = model.lower()
         self.hidden_size = hidden_size
         self.n_layers = n_layers
+        dropout = kwargs.get("dropout", 0.0)
 
         self.encoder = nn.Embedding(input_size, hidden_size)
 
         if self.model == "lstm":
-            self.rnn = StackedLSTM(hidden_size, hidden_size, n_layers)
+            self.rnn = StackedLSTM(hidden_size, hidden_size, n_layers, dropout=dropout)
         elif self.model == "rnn":
-            self.rnn = StackedRNN(hidden_size, hidden_size, n_layers)
+            self.rnn = StackedRNN(hidden_size, hidden_size, n_layers, dropout=dropout)
+        elif self.model == "gru":
+            self.rnn = StackedGRU(hidden_size, hidden_size, n_layers, dropout=dropout)
         else:
-            self.rnn = StackedGRU(hidden_size, hidden_size, n_layers)
+            raise ValueError(f"Unsupported model type: {model}")
 
         self.decoder = nn.Linear(hidden_size, output_size)
 
     def forward(self, input, hidden):
         # 统一接口：input 可为 (batch,) 或 (batch, seq_len)
         if input.dim() == 1:
-            # TODO: 将一维 input 扩展为 (batch, 1)
-            input = None
+            input = input.unsqueeze(1)
 
         batch_size, seq_len = input.size()
-        # TODO: 通过 encoder 得到 encoded，形状应为 (batch, seq_len, hidden)
-        encoded = None
+        encoded = self.encoder(input)
 
         # 手写 RNN 同样期望 (seq_len, batch, hidden)
-        # TODO: 调整 encoded 维度为 (seq_len, batch, hidden)
-        encoded = None
+        encoded = encoded.transpose(0, 1)
 
-        # TODO: 调用 self.rnn，得到 output 和 hidden
-        output, hidden = None, None
+        output, hidden = self.rnn(encoded, hidden)
         # output: (seq_len, batch, hidden)
-        # TODO: 将 output 调整为 (batch, seq_len, hidden)，再 reshape 为 (batch*seq_len, hidden)
-        output = None
+        output = output.transpose(0, 1).contiguous().view(batch_size * seq_len, self.hidden_size)
 
-        # TODO: 通过 decoder 得到最终输出
-        output = None
+        output = self.decoder(output)
         return output, hidden
 
     def init_hidden(self, batch_size):
         device = next(self.parameters()).device
         if self.model == "lstm":
-            # TODO: 初始化 LSTM 的 h0 和 c0（形状: n_layers, batch_size, hidden_size）
-            h0 = None
-            c0 = None
+            h0 = torch.zeros(self.n_layers, batch_size, self.hidden_size, device=device)
+            c0 = torch.zeros(self.n_layers, batch_size, self.hidden_size, device=device)
             return h0, c0
-        # TODO: 初始化 RNN/GRU 的 h0（形状: n_layers, batch_size, hidden_size）
-        return None
+        return torch.zeros(self.n_layers, batch_size, self.hidden_size, device=device)
