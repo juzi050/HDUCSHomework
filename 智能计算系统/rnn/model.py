@@ -1,5 +1,4 @@
 import os
-import zlib
 
 import torch
 import torch.nn as nn
@@ -8,14 +7,6 @@ from helpers import all_characters
 
 
 NGRAM_CACHE = {}
-
-DTYPE_TO_NAME = {
-    torch.uint8: "uint8",
-    torch.int32: "int32",
-    torch.int64: "int64",
-}
-
-NAME_TO_DTYPE = {name: dtype for dtype, name in DTYPE_TO_NAME.items()}
 
 
 def _build_char_ids(text):
@@ -139,24 +130,6 @@ def _build_order10_table(ids):
     hi_starts = torch.nonzero(hi_change, as_tuple=False).squeeze(1).to(torch.int32)
     hi_unique = mode_hi[hi_starts.to(torch.long)]
     return hi_unique, hi_starts, mode_lo, mode_vals
-
-
-def _compress_tensor(tensor):
-    byte_view = tensor.detach().cpu().contiguous().view(torch.uint8)
-    payload = zlib.compress(bytes(byte_view.untyped_storage()), level=9)
-    return {
-        "dtype": DTYPE_TO_NAME[tensor.dtype],
-        "shape": list(tensor.shape),
-        "data": torch.frombuffer(bytearray(payload), dtype=torch.uint8).clone(),
-    }
-
-
-def _decompress_tensor(payload):
-    raw = zlib.decompress(bytes(payload["data"].contiguous().untyped_storage()))
-    byte_tensor = torch.frombuffer(bytearray(raw), dtype=torch.uint8)
-    dtype = NAME_TO_DTYPE[payload["dtype"]]
-    shape = tuple(payload["shape"])
-    return byte_tensor.view(dtype).view(shape).clone()
 
 
 # ---------------------------------------------------------------------------
@@ -456,10 +429,7 @@ class CharRNN(nn.Module):
             "ngram_order": self.ngram_order,
             "max_ngram_order": self.max_ngram_order,
             "ngram_tables": {
-                order: {
-                    "keys": _compress_tensor(keys),
-                    "preds": _compress_tensor(preds),
-                }
+                order: (keys.detach().cpu(), preds.detach().cpu())
                 for order, (keys, preds) in self._ngram_tables.items()
             },
         }
@@ -467,10 +437,10 @@ class CharRNN(nn.Module):
             state["ngram10"] = None
         else:
             state["ngram10"] = {
-                "hi_unique": _compress_tensor(self._ngram10_hi_unique),
-                "hi_starts": _compress_tensor(self._ngram10_hi_starts),
-                "lo": _compress_tensor(self._ngram10_lo),
-                "preds": _compress_tensor(self._ngram10_preds),
+                "hi_unique": self._ngram10_hi_unique.detach().cpu(),
+                "hi_starts": self._ngram10_hi_starts.detach().cpu(),
+                "lo": self._ngram10_lo.detach().cpu(),
+                "preds": self._ngram10_preds.detach().cpu(),
             }
         return state
 
@@ -484,28 +454,12 @@ class CharRNN(nn.Module):
             preds = state.get("ngram_preds")
             if keys is not None and preds is not None:
                 self._ngram_tables = {self.ngram_order: (keys, preds)}
-        elif self._ngram_tables:
-            sample = next(iter(self._ngram_tables.values()))
-            if isinstance(sample, dict):
-                self._ngram_tables = {
-                    int(order): (
-                        _decompress_tensor(payload["keys"]),
-                        _decompress_tensor(payload["preds"]),
-                    )
-                    for order, payload in self._ngram_tables.items()
-                }
         ngram10 = state.get("ngram10")
         if ngram10:
-            if isinstance(ngram10.get("hi_unique"), dict):
-                self._ngram10_hi_unique = _decompress_tensor(ngram10["hi_unique"])
-                self._ngram10_hi_starts = _decompress_tensor(ngram10["hi_starts"])
-                self._ngram10_lo = _decompress_tensor(ngram10["lo"])
-                self._ngram10_preds = _decompress_tensor(ngram10["preds"])
-            else:
-                self._ngram10_hi_unique = ngram10.get("hi_unique")
-                self._ngram10_hi_starts = ngram10.get("hi_starts")
-                self._ngram10_lo = ngram10.get("lo")
-                self._ngram10_preds = ngram10.get("preds")
+            self._ngram10_hi_unique = ngram10.get("hi_unique")
+            self._ngram10_hi_starts = ngram10.get("hi_starts")
+            self._ngram10_lo = ngram10.get("lo")
+            self._ngram10_preds = ngram10.get("preds")
 
     def _ensure_ngram_model(self):
         if self._ngram_tables and len(self._ngram_tables) >= self.ngram_order:
