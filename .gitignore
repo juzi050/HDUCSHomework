@@ -1,0 +1,14 @@
+# Vivado generated files
+**/.Xil/
+**/vivado_project/
+**/vivado_project_batch/
+**/*.jou
+**/*.log
+**/*.wdb
+**/*.wcfg
+**/*.pb
+**/*.dcp
+**/*.rpx
+**/*.str
+**/clockInfo.txt
+**/dfx_runtime.txt
