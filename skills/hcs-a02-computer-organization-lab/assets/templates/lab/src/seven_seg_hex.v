@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module seven_seg_hex(
     input wire [3:0] hex,
     output reg [6:0] seg

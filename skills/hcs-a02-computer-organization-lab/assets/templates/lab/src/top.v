@@ -1,3 +1,5 @@
+`timescale 1ns / 1ps
+
 module __MODULE_NAME__(
     input wire clk100mhz,
     input wire [35:0] sw,
