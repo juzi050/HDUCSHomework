@@ -1,0 +1,4 @@
+interface:
+  display_name: "HCS-A02 组成原理实验"
+  short_description: "HCS-A02 computer organization lab workflow"
+  default_prompt: "Use $hcs-a02-computer-organization-lab to complete an HCS-A02 computer organization lab with simulation, constraints, and bitstream steps."
