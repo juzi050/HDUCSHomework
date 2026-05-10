@@ -1,0 +1,90 @@
+================================================================================
+                    字符级RNN实验 — 课程知识点
+================================================================================
+
+【CharRNN 架构概述】
+CharRNN 是一个字符级序列预测/文本生成模型。模型每一步输入一个字符（字符索引），学习预测下一个字符。
+模型类名为 CharRNN，必须导出以下接口：
+- __init__(self, input_size, output_size, hidden_size=128, model="gru", n_layers=2)
+- forward(self, input, hidden) -> (output, hidden)
+- init_hidden(self, batch_size) -> hidden
+
+张量维度约定：
+- input: (B,) 单步输入 或 (B, L) 整段序列输入，类型 torch.LongTensor
+- hidden: RNN/GRU 为 (n_layers, B, hidden_size)，LSTM 为 (h, c) 元组
+- output: (B*L, output_size)，与 target.view(-1) 对齐用于 CrossEntropyLoss
+- 输入为 (B,) 时，内部等价于 (B, 1) 处理，输出为 (B, output_size)
+
+【RNN 单元数学公式】
+标准 RNN 单元：
+  h_t = tanh(W_ih * x_t + b_ih + W_hh * h_{t-1} + b_hh)
+其中 W_ih 是输入到隐状态的权重矩阵，W_hh 是隐状态到隐状态的权重矩阵。
+
+【LSTM 单元数学公式】
+长短期记忆（LSTM）包含三个门和一个细胞状态：
+  i_t = sigmoid(W_ii * x_t + b_ii + W_hi * h_{t-1} + b_hi)    — 输入门
+  f_t = sigmoid(W_if * x_t + b_if + W_hf * h_{t-1} + b_hf)    — 遗忘门
+  g_t = tanh(W_ig * x_t + b_ig + W_hg * h_{t-1} + b_hg)        — 候选细胞状态
+  o_t = sigmoid(W_io * x_t + b_io + W_ho * h_{t-1} + b_ho)    — 输出门
+  c_t = f_t * c_{t-1} + i_t * g_t                              — 细胞状态更新
+  h_t = o_t * tanh(c_t)                                         — 隐状态输出
+
+LSTM 通过遗忘门控制保留多少旧信息，通过输入门控制接受多少新信息，有效缓解了梯度消失问题。
+
+【GRU 单元数学公式】
+门控循环单元（GRU）使用两个门：
+  r_t = sigmoid(W_ir * x_t + b_ir + W_hr * h_{t-1} + b_hr)    — 重置门
+  z_t = sigmoid(W_iz * x_t + b_iz + W_hz * h_{t-1} + b_hz)    — 更新门
+  n_t = tanh(W_in * x_t + b_in + r_t * (W_hn * h_{t-1} + b_hn)) — 候选隐状态
+  h_t = (1 - z_t) * n_t + z_t * h_{t-1}                        — 最终隐状态
+
+重置门控制忽略多少过去的信息，更新门控制保留多少过去状态（类似 LSTM 的遗忘门和输入门的组合）。
+GRU 比 LSTM 少一个门，参数更少，训练更快，在不少任务上效果相当。
+
+【层归一化（LayerNorm）】
+在每个 RNN/LSTM/GRU 单元中，对隐状态进行层归一化：
+  LayerNorm(x) = (x - mean(x)) / sqrt(var(x) + eps) * gamma + beta
+其中 gamma 和 beta 是可学习的缩放和偏移参数。
+
+【权重初始化】
+- Xavier 初始化用于输入权重 W_ih：从 U(-sqrt(6/(fan_in+fan_out)), sqrt(6/(fan_in+fan_out))) 均匀分布采样
+- 正交初始化用于循环权重 W_hh：使用随机正交矩阵（通过 QR 分解获得）
+
+【权重绑定（Weight Tying）】
+当 input_size == output_size 时，解码器权重可以与编码器嵌入权重共享：
+  decoder.weight = encoder.weight
+这样可以减少参数数量，提高模型泛化能力。
+
+【N-gram 缓存机制】
+评估时使用 n-gram（n 从 1 到 10）频率统计来修正模型输出：
+- 统计训练集中每种 n-gram 后接字符的频率
+- 用出现次数最多的字符（众数）作为 bonus 加到 logits 上
+- 需要按频率高低进行二级排序（先按 key 排序，再按频率降序）
+- 对于 10-gram，将 10 个字符的上下文分解为高 5 位（hi）和低 5 位（lo）分别编码
+- 这可以显著提高评估时的困惑度和准确率
+
+【训练配置】
+- 优化器：Adam
+- 损失函数：CrossEntropyLoss
+- 学习率 lr：0.01
+- 训练轮数 epochs：1000（默认）
+- 序列长度 chunk_len：100
+- 批大小 batch_size：100
+- 数据集：预处理后的 TinyStories 数据集（约 17MB）
+
+【评估指标】
+- loss：平均交叉熵损失，越低越好
+- ppl（Perplexity 困惑度）：exp(loss)，衡量模型对数据的"惊讶程度"，越低越好
+- acc（字符级准确率）：每一步预测是否等于真实下一个字符，越高越好
+
+【文本生成】
+使用 temperature 控制采样随机性：
+- temperature 越小，输出越保守（倾向于高频字符）
+- temperature 越大，输出越随机（更多样化）
+- 使用基于温度的多项式采样（multinomial sampling）生成下一个字符
+
+【建议实验方向】
+- 尝试不同的 RNN 结构（rnn/lstm/gru）
+- 调整 hidden_size 和 n_layers
+- 调整 chunk_len 与 batch_size
+- 调整 temperature 体验不同的生成风格
