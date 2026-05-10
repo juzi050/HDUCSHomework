@@ -53,7 +53,7 @@ def load_model_and_tokenizer():
     # Load model with optimizations
     _model = AutoModelForCausalLM.from_pretrained(
         model_path,
-        torch_dtype=torch.float16,     # Halve memory vs fp32
+        dtype=torch.float16,            # Halve memory vs fp32
         device_map="auto",             # Auto-place on GPU
         trust_remote_code=True,
         low_cpu_mem_usage=True,        # Reduce host RAM during loading
@@ -89,6 +89,7 @@ def _warm_up():
             messages,
             tokenize=False,
             add_generation_prompt=True,
+            enable_thinking=False,
         )
         inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
         with torch.inference_mode():

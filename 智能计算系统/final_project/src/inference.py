@@ -24,17 +24,20 @@ def generate_answer(model, tokenizer, inputs):
         Decoded answer string (whitespace stripped).
     """
     with torch.inference_mode():
-        outputs = model.generate(
-            **inputs,
-            max_new_tokens=MAX_NEW_TOKENS,
-            temperature=TEMPERATURE,            # Ignored when do_sample=False
-            top_p=TOP_P,                        # Ignored when do_sample=False
-            top_k=TOP_K,                        # Ignored when do_sample=False
-            do_sample=DO_SAMPLE,                # Greedy: fastest, deterministic
-            repetition_penalty=REPETITION_PENALTY,
-            pad_token_id=tokenizer.pad_token_id,
-            eos_token_id=tokenizer.eos_token_id,
-        )
+        generate_kwargs = {
+            "max_new_tokens": MAX_NEW_TOKENS,
+            "do_sample": DO_SAMPLE,
+            "repetition_penalty": REPETITION_PENALTY,
+            "pad_token_id": tokenizer.pad_token_id,
+            "eos_token_id": tokenizer.eos_token_id,
+        }
+        # Only pass sampling params when actually sampling
+        if DO_SAMPLE:
+            generate_kwargs["temperature"] = TEMPERATURE
+            generate_kwargs["top_p"] = TOP_P
+            generate_kwargs["top_k"] = TOP_K
+
+        outputs = model.generate(**inputs, **generate_kwargs)
 
     # Decode only the newly generated tokens (skip input)
     input_len = inputs["input_ids"].shape[1]

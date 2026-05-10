@@ -61,6 +61,7 @@ def main():
         messages,
         tokenize=False,
         add_generation_prompt=True,
+        enable_thinking=False,  # Disable Qwen3 thinking mode for faster QA
     )
     inputs = tokenizer([text], return_tensors="pt").to(model.device)
 
