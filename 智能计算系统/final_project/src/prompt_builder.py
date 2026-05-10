@@ -27,7 +27,9 @@ def build_prompt(question, rag_context=None, system_prompt=None):
     if rag_context:
         context_text = _format_rag_context(rag_context)
         rag_message = (
-            "以下是与问题相关的课程知识片段，请参考这些内容回答问题：\n\n"
+            "【重要指令】以下是课程教材中的权威知识片段。你必须严格依据"
+            "以下资料回答问题，优先使用资料中的公式、数值和表述。"
+            "如果资料中有明确信息，不要用自己的知识替换：\n\n"
             "{}".format(context_text)
         )
         messages.append({"role": "system", "content": rag_message})
