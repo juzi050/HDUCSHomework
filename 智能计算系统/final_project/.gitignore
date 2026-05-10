@@ -1,0 +1,11 @@
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Model files (too large for git, managed separately)
+model/*.safetensors
+model/*.bin
+model/*.h5
+model/*.msgpack
+model/*.ot
