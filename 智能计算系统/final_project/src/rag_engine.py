@@ -170,10 +170,11 @@ class RAGEngine:
             # Base score: fuzzy sequence similarity
             score = SequenceMatcher(None, q_lower, doc_lower).ratio()
 
-            # Bonus for keyword matches
+            # Bonus for keyword matches (space-insensitive)
+            doc_norm = doc_lower.replace(" ", "")
             for kw in found_keywords:
-                if kw.lower() in doc_lower:
-                    score += 0.15
+                if kw.lower().replace(" ", "") in doc_norm:
+                    score += 0.25
 
             scored.append((score, doc))
 
@@ -191,9 +192,15 @@ class RAGEngine:
         return results
 
     def _extract_keywords(self, text):
-        """Extract domain-specific keywords found in the text."""
+        """Extract domain-specific keywords found in the text.
+
+        Matching is space-insensitive so that "Gram 矩阵" matches "Gram矩阵".
+        """
         found = []
+        # Normalize: remove spaces for matching
+        text_norm = text.lower().replace(" ", "")
         for kw in DOMAIN_KEYWORDS:
-            if kw.lower() in text.lower():
+            kw_norm = kw.lower().replace(" ", "")
+            if kw_norm in text_norm:
                 found.append(kw)
         return found
