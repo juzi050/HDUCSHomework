@@ -2,6 +2,7 @@
 **/.Xil/
 **/vivado_project/
 **/vivado_project_batch/
+**/sim_build/
 **/*.jou
 **/*.log
 **/*.wdb
