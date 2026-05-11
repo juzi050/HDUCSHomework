@@ -1,0 +1,92 @@
+Changed database context to 'GradeManager'.
+【实验六】SQL 的存储操作
+Item
+----
+15(1) 将20311班全体学生的成绩置0值（事务内演示）
+
+(1 rows affected)
+
+(5 rows affected)
+UpdatedRows
+-----------
+5
+
+(1 rows affected)
+Clno Sno Cno Gmark
+---- --- --- -----
+20311 2020101 1   .0
+20311 2020101 3   .0
+20311 2020101 5   .0
+20311 2020102 1   .0
+20311 2020102 6   .0
+
+(5 rows affected)
+Item
+----
+15(2) 删除2021级软件工程学生的选课记录（事务内演示）
+
+(1 rows affected)
+
+(4 rows affected)
+DeletedRows
+-----------
+4
+
+(1 rows affected)
+Item
+----
+15(3) 学生李勇退学，删除与他有关的记录（事务内演示）
+
+(1 rows affected)
+
+(3 rows affected)
+DeletedGradeRows
+----------------
+3
+
+(1 rows affected)
+
+(1 rows affected)
+DeletedStudentRows
+------------------
+1
+
+(1 rows affected)
+Item
+----
+15(4) 对每个班求学生平均年龄，并把结果存入数据库
+
+(1 rows affected)
+
+(3 rows affected)
+Clno Speciality Inyear AvgAge
+---- ---------- ------ ------
+20311 软件工程 2020 23.00
+20312 计算机科学与技术 2020 23.00
+21311 软件工程 2021 21.75
+
+(3 rows affected)
+Item
+----
+验证工程师基本工资增加100的UPDATE语句（事务内演示）
+
+(1 rows affected)
+Stage Eno Ename Title Basepay
+----- --- ----- ----- -------
+更新前 E001   赵强 工程师 3600.00
+更新前 E003   孙敏 工程师 4100.00
+
+(2 rows affected)
+
+(2 rows affected)
+UpdatedEngineerRows
+-------------------
+2
+
+(1 rows affected)
+Stage Eno Ename Title Basepay
+----- --- ----- ----- -------
+更新后（事务内） E001   赵强 工程师 3700.00
+更新后（事务内） E003   孙敏 工程师 4200.00
+
+(2 rows affected)

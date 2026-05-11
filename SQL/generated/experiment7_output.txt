@@ -1,0 +1,139 @@
+Changed database context to 'GradeManager'.
+【实验七】视图的建立及操作
+Item
+----
+16(1) 20312班选修1号课程的学生视图 Stu_20312_1
+
+(1 rows affected)
+Sno Sname Cno Gmark
+--- ----- --- -----
+2020103 王一鸣 1   83.0
+2020104 张婷婷 1   54.0
+
+(2 rows affected)
+Item
+----
+16(2) 20312班选修1号课程且不及格的学生视图 Stu_20312_2
+
+(1 rows affected)
+Sno Sname Cno Gmark
+--- ----- --- -----
+2020104 张婷婷 1   54.0
+
+(1 rows affected)
+Item
+----
+16(3) 学生学号、姓名和年龄视图 Stu_age
+
+(1 rows affected)
+Sno Sname Age
+--- ----- ---
+2020101 李勇 23
+2020102 刘诗晨 23
+2020103 王一鸣 23
+2020104 张婷婷 23
+2021101 李勇敏 22
+2021102 贾向东 22
+2021103 陈宝玉 22
+2021104 张逸凡 21
+
+(8 rows affected)
+Item
+----
+16(4) 查询2000年以后出生的学生姓名
+
+(1 rows affected)
+Sname
+-----
+李勇
+刘诗晨
+王一鸣
+张婷婷
+李勇敏
+贾向东
+陈宝玉
+张逸凡
+
+(8 rows affected)
+Item
+----
+16(5) 查询20312班选修1号课程且不及格学生的学号、姓名和年龄
+
+(1 rows affected)
+Sno Sname Age
+--- ----- ---
+2020104 张婷婷 23
+
+(1 rows affected)
+Item
+----
+16(6) 查询选课数超过两门学生的平均成绩和选课门数
+
+(1 rows affected)
+Sno Sname AvgMark CourseCount
+--- ----- ------- -----------
+2020101 李勇 88.666666 3
+2020103 王一鸣 73.142857 7
+
+(2 rows affected)
+Item
+----
+16(7) 软件工程专业中比计算机科学与技术专业所有学生年龄小的学生
+
+(1 rows affected)
+Sno Sname Age
+--- ----- ---
+2021101 李勇敏 22
+2021102 贾向东 22
+2021103 陈宝玉 22
+2021104 张逸凡 21
+
+(4 rows affected)
+Item
+----
+16(8) 每门课程平均成绩和不及格率
+
+(1 rows affected)
+Cno Cname AvgMark FailCount FailPercent
+--- ----- ------- --------- -----------
+1   数据库系统原理 76.75 1 25.00
+2   计算机系统结构 75.33 0 .00
+3   数字电路设计 76.50 0 .00
+4   操作系统 70.33 1 33.33
+5   数据结构 76.00 0 .00
+6   软件工程 72.00 1 33.33
+7   C语言 88.00 0 .00
+
+(7 rows affected)
+Item
+----
+实验内容2：Class_grade视图反映每个班各选修课平均成绩
+
+(1 rows affected)
+Clno Cno Cname AvgMark
+---- --- ----- -------
+20311 1   数据库系统原理 85.00
+20311 3   数字电路设计 88.00
+20311 5   数据结构 86.00
+20311 6   软件工程 55.00
+20312 1   数据库系统原理 68.50
+20312 2   计算机系统结构 76.00
+20312 3   数字电路设计 65.00
+20312 4   操作系统 56.00
+20312 5   数据结构 66.00
+20312 6   软件工程 80.50
+20312 7   C语言 88.00
+21311 2   计算机系统结构 75.00
+21311 4   操作系统 77.50
+
+(13 rows affected)
+Item
+----
+验证Class_grade聚合视图是否可以更新
+
+(1 rows affected)
+ErrorNumber ErrorMessage
+----------- ------------
+4406 Update or insert of view or function 'Class_grade' failed because it contains a derived or constant field.
+
+(1 rows affected)
