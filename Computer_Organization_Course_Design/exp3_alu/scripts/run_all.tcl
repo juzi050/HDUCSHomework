@@ -6,6 +6,7 @@ set build_dir [file join $root_dir "build"]
 source [file join $script_dir "create_project.tcl"]
 
 launch_simulation
+run all
 close_sim
 close_project
 

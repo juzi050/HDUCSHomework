@@ -1,12 +1,17 @@
 ## HCS-A02 board constraints for Experiment 3 ALU.
-## SW[2:0]  -> ALU_OP[2:0]
-## SW[5:3]  -> AB_SW[2:0]
-## SW[8:6]  -> F_LED_SW[2:0]
-## LD[7:0]  -> selected result byte or flags
-## LD[8]    -> ZF
-## LD[9]    -> OF
-## AN[7:0]  -> 7-segment digit enables, active low
-## SEG[7:0] -> {DP, CG, CF, CE, CD, CC, CB, CA}, active low
+## SW[31:0]  -> 32-bit data input.
+## SW[34:32] -> ALU_OP[2:0].
+## SW[35]    -> reserved.
+## BT[0]     -> load SW[31:0] into A.
+## BT[1]     -> load SW[31:0] into B.
+## BT[2]     -> clear A/B and return LED display to F.
+## BT[3]     -> cycle LED display F -> A -> B -> F.
+## LD[31:0]  -> selected 32-bit value.
+## LD[32]    -> ZF.
+## LD[33]    -> OF.
+## LD[35:34] -> display mode, 00=A, 01=B, 10=F.
+## AN[7:0]   -> 7-segment digit enables, active low.
+## SEG[7:0]  -> {DP, CG, CF, CE, CD, CC, CB, CA}, active low.
 
 set_property -dict { PACKAGE_PIN E3 IOSTANDARD LVCMOS33 } [get_ports CLK100MHZ]
 create_clock -period 10.000 -name clk100mhz [get_ports CLK100MHZ]
@@ -20,6 +25,38 @@ set_property -dict { PACKAGE_PIN U13 IOSTANDARD LVCMOS33 } [get_ports { SW[5] }]
 set_property -dict { PACKAGE_PIN U12 IOSTANDARD LVCMOS33 } [get_ports { SW[6] }]
 set_property -dict { PACKAGE_PIN U11 IOSTANDARD LVCMOS33 } [get_ports { SW[7] }]
 set_property -dict { PACKAGE_PIN U9  IOSTANDARD LVCMOS33 } [get_ports { SW[8] }]
+set_property -dict { PACKAGE_PIN U7  IOSTANDARD LVCMOS33 } [get_ports { SW[9] }]
+set_property -dict { PACKAGE_PIN U6  IOSTANDARD LVCMOS33 } [get_ports { SW[10] }]
+set_property -dict { PACKAGE_PIN V4  IOSTANDARD LVCMOS33 } [get_ports { SW[11] }]
+set_property -dict { PACKAGE_PIN V2  IOSTANDARD LVCMOS33 } [get_ports { SW[12] }]
+set_property -dict { PACKAGE_PIN V1  IOSTANDARD LVCMOS33 } [get_ports { SW[13] }]
+set_property -dict { PACKAGE_PIN T9  IOSTANDARD LVCMOS33 } [get_ports { SW[14] }]
+set_property -dict { PACKAGE_PIN R8  IOSTANDARD LVCMOS33 } [get_ports { SW[15] }]
+set_property -dict { PACKAGE_PIN P18 IOSTANDARD LVCMOS33 } [get_ports { SW[16] }]
+set_property -dict { PACKAGE_PIN R18 IOSTANDARD LVCMOS33 } [get_ports { SW[17] }]
+set_property -dict { PACKAGE_PIN V17 IOSTANDARD LVCMOS33 } [get_ports { SW[18] }]
+set_property -dict { PACKAGE_PIN V16 IOSTANDARD LVCMOS33 } [get_ports { SW[19] }]
+set_property -dict { PACKAGE_PIN V15 IOSTANDARD LVCMOS33 } [get_ports { SW[20] }]
+set_property -dict { PACKAGE_PIN U14 IOSTANDARD LVCMOS33 } [get_ports { SW[21] }]
+set_property -dict { PACKAGE_PIN V12 IOSTANDARD LVCMOS33 } [get_ports { SW[22] }]
+set_property -dict { PACKAGE_PIN V11 IOSTANDARD LVCMOS33 } [get_ports { SW[23] }]
+set_property -dict { PACKAGE_PIN V9  IOSTANDARD LVCMOS33 } [get_ports { SW[24] }]
+set_property -dict { PACKAGE_PIN V7  IOSTANDARD LVCMOS33 } [get_ports { SW[25] }]
+set_property -dict { PACKAGE_PIN V6  IOSTANDARD LVCMOS33 } [get_ports { SW[26] }]
+set_property -dict { PACKAGE_PIN V5  IOSTANDARD LVCMOS33 } [get_ports { SW[27] }]
+set_property -dict { PACKAGE_PIN U3  IOSTANDARD LVCMOS33 } [get_ports { SW[28] }]
+set_property -dict { PACKAGE_PIN U2  IOSTANDARD LVCMOS33 } [get_ports { SW[29] }]
+set_property -dict { PACKAGE_PIN U1  IOSTANDARD LVCMOS33 } [get_ports { SW[30] }]
+set_property -dict { PACKAGE_PIN T8  IOSTANDARD LVCMOS33 } [get_ports { SW[31] }]
+set_property -dict { PACKAGE_PIN R11 IOSTANDARD LVCMOS33 } [get_ports { SW[32] }]
+set_property -dict { PACKAGE_PIN T11 IOSTANDARD LVCMOS33 } [get_ports { SW[33] }]
+set_property -dict { PACKAGE_PIN R10 IOSTANDARD LVCMOS33 } [get_ports { SW[34] }]
+set_property -dict { PACKAGE_PIN T10 IOSTANDARD LVCMOS33 } [get_ports { SW[35] }]
+
+set_property -dict { PACKAGE_PIN D15 IOSTANDARD LVCMOS33 } [get_ports { BT[0] }]
+set_property -dict { PACKAGE_PIN C10 IOSTANDARD LVCMOS33 } [get_ports { BT[1] }]
+set_property -dict { PACKAGE_PIN C11 IOSTANDARD LVCMOS33 } [get_ports { BT[2] }]
+set_property -dict { PACKAGE_PIN H16 IOSTANDARD LVCMOS33 } [get_ports { BT[3] }]
 
 set_property -dict { PACKAGE_PIN T14 IOSTANDARD LVCMOS33 } [get_ports { LD[0] }]
 set_property -dict { PACKAGE_PIN T15 IOSTANDARD LVCMOS33 } [get_ports { LD[1] }]
@@ -31,6 +68,32 @@ set_property -dict { PACKAGE_PIN N16 IOSTANDARD LVCMOS33 } [get_ports { LD[6] }]
 set_property -dict { PACKAGE_PIN N15 IOSTANDARD LVCMOS33 } [get_ports { LD[7] }]
 set_property -dict { PACKAGE_PIN P15 IOSTANDARD LVCMOS33 } [get_ports { LD[8] }]
 set_property -dict { PACKAGE_PIN K16 IOSTANDARD LVCMOS33 } [get_ports { LD[9] }]
+set_property -dict { PACKAGE_PIN L18 IOSTANDARD LVCMOS33 } [get_ports { LD[10] }]
+set_property -dict { PACKAGE_PIN N17 IOSTANDARD LVCMOS33 } [get_ports { LD[11] }]
+set_property -dict { PACKAGE_PIN M17 IOSTANDARD LVCMOS33 } [get_ports { LD[12] }]
+set_property -dict { PACKAGE_PIN M18 IOSTANDARD LVCMOS33 } [get_ports { LD[13] }]
+set_property -dict { PACKAGE_PIN R17 IOSTANDARD LVCMOS33 } [get_ports { LD[14] }]
+set_property -dict { PACKAGE_PIN U18 IOSTANDARD LVCMOS33 } [get_ports { LD[15] }]
+set_property -dict { PACKAGE_PIN V10 IOSTANDARD LVCMOS33 } [get_ports { LD[16] }]
+set_property -dict { PACKAGE_PIN R7  IOSTANDARD LVCMOS33 } [get_ports { LD[17] }]
+set_property -dict { PACKAGE_PIN T6  IOSTANDARD LVCMOS33 } [get_ports { LD[18] }]
+set_property -dict { PACKAGE_PIN R6  IOSTANDARD LVCMOS33 } [get_ports { LD[19] }]
+set_property -dict { PACKAGE_PIN T5  IOSTANDARD LVCMOS33 } [get_ports { LD[20] }]
+set_property -dict { PACKAGE_PIN R5  IOSTANDARD LVCMOS33 } [get_ports { LD[21] }]
+set_property -dict { PACKAGE_PIN T4  IOSTANDARD LVCMOS33 } [get_ports { LD[22] }]
+set_property -dict { PACKAGE_PIN T3  IOSTANDARD LVCMOS33 } [get_ports { LD[23] }]
+set_property -dict { PACKAGE_PIN R3  IOSTANDARD LVCMOS33 } [get_ports { LD[24] }]
+set_property -dict { PACKAGE_PIN P4  IOSTANDARD LVCMOS33 } [get_ports { LD[25] }]
+set_property -dict { PACKAGE_PIN P3  IOSTANDARD LVCMOS33 } [get_ports { LD[26] }]
+set_property -dict { PACKAGE_PIN N4  IOSTANDARD LVCMOS33 } [get_ports { LD[27] }]
+set_property -dict { PACKAGE_PIN M4  IOSTANDARD LVCMOS33 } [get_ports { LD[28] }]
+set_property -dict { PACKAGE_PIN M3  IOSTANDARD LVCMOS33 } [get_ports { LD[29] }]
+set_property -dict { PACKAGE_PIN L4  IOSTANDARD LVCMOS33 } [get_ports { LD[30] }]
+set_property -dict { PACKAGE_PIN L3  IOSTANDARD LVCMOS33 } [get_ports { LD[31] }]
+set_property -dict { PACKAGE_PIN P14 IOSTANDARD LVCMOS33 } [get_ports { LD[32] }]
+set_property -dict { PACKAGE_PIN R12 IOSTANDARD LVCMOS33 } [get_ports { LD[33] }]
+set_property -dict { PACKAGE_PIN T13 IOSTANDARD LVCMOS33 } [get_ports { LD[34] }]
+set_property -dict { PACKAGE_PIN R13 IOSTANDARD LVCMOS33 } [get_ports { LD[35] }]
 
 set_property -dict { PACKAGE_PIN A6 IOSTANDARD LVCMOS33 } [get_ports { AN[0] }]
 set_property -dict { PACKAGE_PIN B6 IOSTANDARD LVCMOS33 } [get_ports { AN[1] }]

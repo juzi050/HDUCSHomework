@@ -51,7 +51,7 @@ module Third_experiment_first (
                 OF = add_c32 ^ F[31] ^ A[31] ^ add_b[31];
             end
             3'b110: F = ($signed(A) < $signed(B)) ? 32'h00000001 : 32'h00000000;
-            3'b111: F = B << A[4:0];
+            3'b111: F = (A >= 32'd32) ? 32'b0 : (B << A[4:0]);
             default: F = 32'b0;
         endcase
     end
