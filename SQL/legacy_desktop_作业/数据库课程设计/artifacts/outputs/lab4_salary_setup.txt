@@ -1,0 +1,21 @@
+﻿=== SCRIPT ===
+C:\Users\86136\Desktop\作业\数据库课程设计\sql\lab4_salary_setup.sql
+
+=== STDOUT ===
+Changed database context to 'GradeManager'.
+
+(4 rows affected)
+Eno  Basepay     Service    
+---- ----------- -----------
+1001        5000          10
+1002        4500           8
+1003        6200          12
+1004        4300           6
+
+(4 rows affected)
+
+=== STDERR ===
+
+
+=== EXIT_CODE ===
+0

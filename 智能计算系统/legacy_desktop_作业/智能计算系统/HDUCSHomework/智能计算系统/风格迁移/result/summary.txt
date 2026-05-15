@@ -1,0 +1,9 @@
+best_step=200
+best_loss=155062302568.000000
+train_step=201
+alpha=1.0
+beta=500.0
+learning_rate=1.0
+noise=0.5
+image_height=192
+image_width=320

@@ -1,0 +1,20 @@
+{
+  "answers": [
+    {
+      "question": 1,
+      "select": "A"
+    },
+    {
+      "question": 2,
+      "select": ["A", "C"]
+    },
+    {
+      "question": 3,
+      "select": 2
+    },
+    {
+      "question": 4,
+      "select": "option text fragment"
+    }
+  ]
+}

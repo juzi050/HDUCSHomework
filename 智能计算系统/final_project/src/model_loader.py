@@ -1,11 +1,11 @@
-"""Model loading with optimizations: fp16, torch.compile, warm-up, global cache."""
+"""Model loading with fp16 and a process-local cache."""
 
 import os
 import sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
-from .config import MODEL_DIR, WARMUP_INPUT
+from .config import MODEL_DIR
 
 _model = None
 _tokenizer = None
@@ -50,7 +50,7 @@ def load_model_and_tokenizer():
 
     print("[INFO] Loading model (fp16, device_map=auto)...", file=sys.stderr)
 
-    # Load model with optimizations
+    # Load model with moderate memory use.
     _model = AutoModelForCausalLM.from_pretrained(
         model_path,
         dtype=torch.float16,            # Halve memory vs fp32
@@ -60,46 +60,4 @@ def load_model_and_tokenizer():
     )
     _model.eval()
 
-    # Apply torch.compile for faster inference (PyTorch 2.0+)
-    if hasattr(torch, "compile"):
-        try:
-            print("[INFO] Applying torch.compile (mode=reduce-overhead)...",
-                  file=sys.stderr)
-            _model = torch.compile(
-                _model,
-                mode="reduce-overhead",  # Best for repeated inference calls
-                fullgraph=False,         # CausalLM has dynamic shapes
-            )
-        except Exception as exc:
-            print("[WARN] torch.compile failed, using uncompiled model: {}".format(exc),
-                  file=sys.stderr)
-
-    # Warm-up inference: eliminates torch.compile cold-start latency
-    print("[INFO] Running warm-up inference...", file=sys.stderr)
-    _warm_up()
-
     return _model, _tokenizer
-
-
-def _warm_up():
-    """Run a single warm-up inference to trigger compilation and CUDA init."""
-    try:
-        messages = [{"role": "user", "content": WARMUP_INPUT}]
-        text = _tokenizer.apply_chat_template(
-            messages,
-            tokenize=False,
-            add_generation_prompt=True,
-            enable_thinking=False,
-        )
-        inputs = _tokenizer([text], return_tensors="pt").to(_model.device)
-        with torch.inference_mode():
-            _model.generate(
-                **inputs,
-                max_new_tokens=16,
-                do_sample=False,
-                pad_token_id=_tokenizer.pad_token_id,
-                eos_token_id=_tokenizer.eos_token_id,
-            )
-        print("[INFO] Warm-up complete, model ready.", file=sys.stderr)
-    except Exception as exc:
-        print("[WARN] Warm-up failed (non-fatal): {}".format(exc), file=sys.stderr)

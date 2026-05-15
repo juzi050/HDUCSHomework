@@ -1,0 +1,24 @@
+IF DB_ID(N'GradeManager') IS NOT NULL
+BEGIN
+    ALTER DATABASE GradeManager SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE GradeManager;
+END;
+GO
+
+CREATE DATABASE GradeManager;
+GO
+
+USE GradeManager;
+GO
+
+CREATE TABLE Worker
+(
+    Wno CHAR(4) NOT NULL UNIQUE,
+    Wname CHAR(8) NOT NULL,
+    Sex CHAR(2) NOT NULL,
+    Birthday DATETIME
+);
+GO
+
+SELECT * FROM Worker;
+GO

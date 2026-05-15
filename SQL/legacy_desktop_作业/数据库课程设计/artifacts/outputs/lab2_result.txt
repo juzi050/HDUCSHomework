@@ -1,0 +1,11 @@
+实验二结果
+
+数据库 GradeManager 创建结果
+name        
+------------
+GradeManager
+
+Worker 空表查询结果
+Wno | Wname | Sex | Birthday
+----+-------+-----+---------
+（0 行）

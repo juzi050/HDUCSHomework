@@ -1,0 +1,47 @@
+﻿=== SCRIPT ===
+C:\Users\86136\Desktop\作业\数据库课程设计\sql\lab3_setup.sql
+
+=== STDOUT ===
+Changed database context to 'GradeManager'.
+
+(3 rows affected)
+
+(8 rows affected)
+
+(8 rows affected)
+
+(18 rows affected)
+已创建的四张表
+TABLE_NAME                                                                                                                      
+--------------------------------------------------------------------------------------------------------------------------------
+Class                                                                                                                           
+Course                                                                                                                          
+Grade                                                                                                                           
+Student                                                                                                                         
+
+(4 rows affected)
+四张表的记录数
+TableName TotalRows  
+--------- -----------
+Student             8
+Course              8
+Class               3
+Grade              18
+
+(4 rows affected)
+Student表示例数据
+Sno     Sname                Ssex Sbirth           Clno 
+------- -------------------- ---- ---------------- -----
+2020101 ??                   ?          2002-08-09 20311
+2020102 ???                  ?          2003-04-01 20311
+2020103 ???                  ?          2002-12-25 20312
+2020104 ???                  ?          2002-10-01 20312
+2021101 ???                  ?          2003-11-11 21311
+
+(5 rows affected)
+
+=== STDERR ===
+
+
+=== EXIT_CODE ===
+0

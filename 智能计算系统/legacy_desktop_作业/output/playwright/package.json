@@ -1,0 +1,13 @@
+{
+  "private": true,
+  "scripts": {
+    "icourse:run": "node icourse163_quiz_assist.js run",
+    "icourse:extract": "node icourse163_quiz_assist.js extract",
+    "icourse:fill": "node icourse163_quiz_assist.js fill",
+    "icourse:bank": "node icourse163_quiz_assist.js bank",
+    "icourse:edge-fill": "powershell -ExecutionPolicy Bypass -File .\\launch_edge_fill.ps1"
+  },
+  "dependencies": {
+    "playwright": "latest"
+  }
+}

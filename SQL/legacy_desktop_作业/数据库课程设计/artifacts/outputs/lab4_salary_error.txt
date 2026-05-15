@@ -1,0 +1,13 @@
+﻿=== SCRIPT ===
+C:\Users\86136\Desktop\作业\数据库课程设计\sql\lab4_salary_error.sql
+
+=== STDOUT ===
+Changed database context to 'GradeManager'.
+Msg 147, Level 15, State 1, Server a06e4312a256, Line 5
+An aggregate may not appear in the WHERE clause unless it is in a subquery contained in a HAVING clause or a select list, and the column being aggregated is an outer reference.
+
+=== STDERR ===
+
+
+=== EXIT_CODE ===
+1

@@ -1,0 +1,53 @@
+实验三结果
+
+1. 增加 Nation 字段后的 Student 表结构
+COLUMN_NAME | DATA_TYPE
+------------+----------
+Sno         | char     
+Sname       | nvarchar 
+Ssex        | nvarchar 
+Sbirth      | date     
+Clno        | char     
+Nation      | varchar  
+
+2. 删除 Nation 字段后的 Student 表结构
+COLUMN_NAME | DATA_TYPE
+------------+----------
+Sno         | char     
+Sname       | nvarchar 
+Ssex        | nvarchar 
+Sbirth      | date     
+Clno        | char     
+
+3. 插入成绩记录后的结果
+Sno     | Cno | Gmark
+--------+-----+------
+2021104 | 3   | 80.0 
+
+4. 更新成绩记录后的结果
+Sno     | Cno | Gmark
+--------+-----+------
+2021104 | 3   | 70.0 
+
+5. 删除成绩记录后的结果
+Sno | Cno | Gmark
+----+-----+------
+（0 行）
+
+6. 创建 IX_Class 索引后的结果
+name     | type_desc   
+---------+-------------
+IX_Class | NONCLUSTERED
+
+7. 删除 IX_Class 索引后的结果
+name | type_desc
+-----+----------
+（0 行）
+
+8. 实验三结束后四张表的记录数
+TableName | TotalRows
+----------+----------
+Student   | 8        
+Course    | 8        
+Class     | 3        
+Grade     | 18

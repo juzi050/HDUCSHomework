@@ -1,0 +1,15 @@
+﻿=== SCRIPT ===
+C:\Users\86136\Desktop\作业\数据库课程设计\sql\lab2_setup.sql
+
+=== STDOUT ===
+Changed database context to 'GradeManager'.
+Wno  Wname    Sex Birthday               
+---- -------- --- -----------------------
+
+(0 rows affected)
+
+=== STDERR ===
+
+
+=== EXIT_CODE ===
+0

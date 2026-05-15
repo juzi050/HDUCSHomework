@@ -1,0 +1,20 @@
+{
+  "bank": [
+    {
+      "text": "question text fragment",
+      "answer": "A"
+    },
+    {
+      "text": "another question text fragment",
+      "answer": ["A", "C"]
+    },
+    {
+      "question": 3,
+      "answer": 2
+    },
+    {
+      "text": "question text fragment",
+      "answer": "option text fragment"
+    }
+  ]
+}

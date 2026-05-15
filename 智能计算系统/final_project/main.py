@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Intelligent Computing System Final Project — Leaderboard Entry Point.
+"""Intelligent Computing System Final Project local QA entry point.
 
 Usage:
     python main.py "question text"
     python main.py "question text" "path/to/knowledge_base"
 
-The evaluator invokes this script with the question as sys.argv[1] and
-an optional knowledge base path as sys.argv[2]. The answer is written
-to stdout and must not be empty.
+The runner invokes this script with the question as sys.argv[1] and an
+optional knowledge base path as sys.argv[2]. The answer is written to stdout
+and must not be empty.
 """
 
 import sys
@@ -36,7 +36,7 @@ def main():
 
     start_time = time.perf_counter()
 
-    # Load model (lazy, global cache — first call loads, subsequent calls reuse)
+    # Load model (lazy, global cache: first call loads, subsequent calls reuse)
     print("[INFO] Loading model...", file=sys.stderr)
     model, tokenizer = load_model_and_tokenizer()
 

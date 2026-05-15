@@ -1,0 +1,18 @@
+实验四错误语句验证
+
+Salary 表初始数据
+Eno  | Basepay | Service
+-----+---------+--------
+1001 | 5000    | 10     
+1002 | 4500    | 8      
+1003 | 6200    | 12     
+1004 | 4300    | 6      
+
+错误写法执行结果
+(147, b'An aggregate may not appear in the WHERE clause unless it is in a subquery contained in a HAVING clause or a select list, and the column being aggregated is an outer reference.DB-Lib error message 20018, severity 15:\nGeneral SQL Server error: Check messages from the SQL Server\n')
+
+正确写法执行结果
+Eno  | Basepay | Service
+-----+---------+--------
+1002 | 4500    | 8      
+1004 | 4300    | 6

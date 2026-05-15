@@ -1,0 +1,70 @@
+﻿=== SCRIPT ===
+C:\Users\86136\Desktop\作业\数据库课程设计\sql\lab4_queries.sql
+
+=== STDOUT ===
+Changed database context to 'GradeManager'.
+12(1) 所有被学生选修了的课程号
+Cno
+---
+1  
+2  
+3  
+4  
+5  
+6  
+7  
+
+(7 rows affected)
+12(2) 20311班女学生的个人信息
+Sno     Sname                Ssex Sbirth           Clno 
+------- -------------------- ---- ---------------- -----
+
+(0 rows affected)
+12(3) 20311班、20312班的学生姓名、性别、出生年份
+Sname                Ssex BirthYear  
+-------------------- ---- -----------
+??                   ?           2002
+???                  ?           2003
+???                  ?           2002
+???                  ?           2002
+
+(4 rows affected)
+12(4) 所有姓李的学生的个人信息
+Sno     Sname                Ssex Sbirth           Clno 
+------- -------------------- ---- ---------------- -----
+
+(0 rows affected)
+12(5) 学生李勇所在班级的学生人数
+Number     
+-----------
+
+(0 rows affected)
+12(6) 课程名为操作系统的平均成绩、最高分、最低分
+AvgMark                                  MaxMark MinMark
+---------------------------------------- ------- -------
+                                    NULL    NULL    NULL
+
+(1 rows affected)
+12(7) 选修了课程的学生人数
+StudentCount
+------------
+           7
+
+(1 rows affected)
+12(8) 选修了课程操作系统的学生人数
+StudentCount
+------------
+           0
+
+(1 rows affected)
+12(9) 2020级计算机软件班成绩为空的学生姓名
+Sname               
+--------------------
+
+(0 rows affected)
+
+=== STDERR ===
+
+
+=== EXIT_CODE ===
+0

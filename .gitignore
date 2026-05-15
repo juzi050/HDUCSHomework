@@ -13,3 +13,19 @@
 **/*.str
 **/clockInfo.txt
 **/dfx_runtime.txt
+
+# Generated or bulky local artifacts
+*.zip
+*.exe
+*.pyc
+__pycache__/
+.venv*/
+**/.venv*/
+node_modules/
+~$*
+*.pt
+*.pth
+**/mnist_data/
+**/edge-cdp-profile/
+**/_tmp_*/
+**/pwtmp/

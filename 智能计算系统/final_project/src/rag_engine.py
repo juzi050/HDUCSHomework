@@ -1,24 +1,49 @@
-"""RAG engine: keyword-based retrieval with zero external dependencies.
+"""RAG engine with local text snippets and a prebuilt book index.
 
-Uses domain-specific keyword matching combined with difflib fuzzy matching
-to retrieve relevant course knowledge snippets. No vector DB or embedding
-model needed, keeping memory footprint minimal.
+The retriever uses lightweight lexical matching only. It has no network calls
+and no dependency on vector databases or embedding models.
 """
 
+import json
+import math
 import os
 import re
-from difflib import SequenceMatcher
+import unicodedata
+from collections import Counter
 
-from .config import RAG_TOP_K, MAX_RAG_CHARS
+from .config import RAG_CONTEXT_COUNT, MAX_RAG_CHARS, MAX_RAG_TOTAL_CHARS
 
-# Course-specific domain keywords for matching
+RADICAL_REPLACEMENTS = str.maketrans({
+    0x2EA0: 0x6C11,  # 民
+    0x2EC4: 0x897F,  # 西
+    0x2EC5: 0x89C1,  # 见
+    0x2EC6: 0x89D2,  # 角
+    0x2EC9: 0x8D1D,  # 贝
+    0x2ECB: 0x8F66,  # 车
+    0x2ED3: 0x957F,  # 长
+    0x2ED4: 0x95E8,  # 门
+    0x2ED8: 0x9752,  # 青
+    0x2EDB: 0x98CE,  # 风
+    0x2EDC: 0x98DE,  # 飞
+    0x2EDD: 0x98DF,  # 食
+    0x2EE2: 0x9A6C,  # 马
+    0x2EE3: 0x9AA8,  # 骨
+    0x2EE6: 0x9E1F,  # 鸟
+    0x2EE9: 0x9EC4,  # 黄
+    0x2EEC: 0x9F50,  # 齐
+    0x2EEE: 0x9F7F,  # 齿
+    0x2EF0: 0x9F99,  # 龙
+    0x2EDA: 0x9875,  # 页
+})
+
+# Course-specific domain keywords for matching.
 DOMAIN_KEYWORDS = [
     # RNN / sequence models
     "RNN", "LSTM", "GRU", "循环神经网络", "长短期记忆", "门控循环单元",
     "隐状态", "hidden state", "字符级语言模型", "CharRNN",
     "更新门", "重置门", "遗忘门", "输入门", "输出门", "细胞状态",
     # Style transfer / CNN
-    "风格迁移", "style transfer", "VGG", "VGG19",
+    "风格迁移", "非实时风格迁移", "style transfer", "VGG", "VGG19",
     "卷积", "convolution", "im2col", "img2col",
     "Gram矩阵", "Gram matrix", "内容损失", "content loss",
     "风格损失", "style loss", "内容图", "风格图",
@@ -36,12 +61,15 @@ DOMAIN_KEYWORDS = [
     "n-gram", "N-gram",
     # Neural network architecture & debugging
     "感知机", "多层感知机", "MLP",
+    "网络层", "基本单元", "实现正确", "子网络测试",
     "计算量", "FLOPs", "乘加", "乘法", "加法",
     "前向传播时间", "推理时间",
     "梯度检查", "数值梯度", "梯度流",
     "数据增强", "正则化", "L1", "L2",
     "学习率", "learning rate", "学习率调度",
-    "超参数", "hyperparameter", "alpha", "beta",
+    "超参数", "hyperparameter", "alpha", "beta", "α", "β",
+    "提高精度", "网络结构", "修改网络结构", "不改变网络结构",
+    "功能调试", "精度调试", "正确性验证", "定位错误",
     # Deep learning processors
     "深度学习处理器", "TPU", "GPU", "DLP",
     "矩阵运算单元", "向量单元", "标量单元",
@@ -99,15 +127,14 @@ DOMAIN_KEYWORDS = [
 
 
 class RAGEngine:
-    """Simple keyword + fuzzy matching retrieval engine."""
+    """Simple local retriever for course material."""
 
     def __init__(self, knowledge_base_dir=None):
         """Initialize the RAG engine.
 
         Args:
-            knowledge_base_dir: Path to knowledge base directory.
-                If None, uses the built-in knowledge_base/ directory relative
-                to this source file.
+            knowledge_base_dir: Path to knowledge base directory. If omitted,
+                uses the built-in knowledge_base/ directory.
         """
         if knowledge_base_dir is None:
             knowledge_base_dir = os.path.join(
@@ -115,92 +142,267 @@ class RAGEngine:
             )
         self.kb_dir = os.path.abspath(knowledge_base_dir)
         self.documents = []
+        self.idf = {}
+        self.avg_doc_len = 1.0
         self._load_knowledge_base()
+        self._prepare_statistics()
 
     def _load_knowledge_base(self):
-        """Load all .txt and .json files from the knowledge base directory."""
+        """Load text files and JSONL snippets from the knowledge base."""
         if not os.path.isdir(self.kb_dir):
             return
 
         for fname in sorted(os.listdir(self.kb_dir)):
-            if not fname.endswith((".txt", ".json")):
-                continue
             fpath = os.path.join(self.kb_dir, fname)
-            try:
-                with open(fpath, "r", encoding="utf-8") as f:
-                    content = f.read()
-            except Exception:
+            if fname.endswith(".txt"):
+                self._load_text_file(fpath, fname)
+            elif fname.endswith(".jsonl"):
+                self._load_jsonl_file(fpath, fname)
+
+    def _load_text_file(self, fpath, fname):
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                content = self._normalize_text(f.read())
+        except Exception:
+            return
+
+        current_lines = []
+        current_section = ""
+        for raw_line in content.splitlines():
+            line = raw_line.strip()
+            if not line:
+                if current_lines:
+                    current_lines.append("")
                 continue
 
-            # Split into paragraphs for granular retrieval
-            paragraphs = re.split(r"\n\n+", content.strip())
-            for para in paragraphs:
-                para = para.strip()
-                if len(para) > 50:  # Skip very short fragments
+            if self._is_section_heading(line) and current_lines:
+                self._append_text_blocks(fname, current_section, current_lines)
+                current_lines = []
+
+            if self._is_section_heading(line):
+                current_section = self._guess_section(line)
+            current_lines.append(line)
+
+        if current_lines:
+            self._append_text_blocks(fname, current_section, current_lines)
+
+    def _append_text_blocks(self, fname, section, lines):
+        paragraphs = re.split(r"\n\s*\n", "\n".join(lines).strip())
+        current = ""
+        for para in paragraphs:
+            para = para.strip()
+            if not para:
+                continue
+            if current and len(current) + len(para) + 2 > MAX_RAG_CHARS:
+                self._append_text_document(fname, section, current)
+                current = para
+            else:
+                current = "{}\n\n{}".format(current, para) if current else para
+        if current:
+            self._append_text_document(fname, section, current)
+
+    def _append_text_document(self, fname, section, text):
+        if len(text) <= 50:
+            return
+        self.documents.append({
+            "text": text,
+            "source": fname,
+            "section": section or self._guess_section(text),
+            "page_start": None,
+            "page_end": None,
+            "weight": 2.0,
+        })
+
+    def _load_jsonl_file(self, fpath, fname):
+        try:
+            with open(fpath, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.strip()
+                    if not line:
+                        continue
+                    try:
+                        item = json.loads(line)
+                    except ValueError:
+                        continue
+                    text = self._normalize_text(item.get("text", "")).strip()
+                    if len(text) <= 50:
+                        continue
                     self.documents.append({
-                        "text": para,
-                        "source": fname,
+                        "text": text,
+                        "source": item.get("source") or fname,
+                        "section": item.get("section") or "",
+                        "page_start": item.get("page_start"),
+                        "page_end": item.get("page_end"),
+                        "weight": 1.0,
                     })
+        except Exception:
+            return
 
-    def retrieve(self, question, top_k=None):
-        """Retrieve the most relevant knowledge snippets for a question.
+    def _prepare_statistics(self):
+        doc_freq = Counter()
+        total_terms = 0
+        for doc in self.documents:
+            terms = Counter(self._tokenize(doc["text"]))
+            doc["terms"] = terms
+            doc["term_total"] = max(sum(terms.values()), 1)
+            total_terms += doc["term_total"]
+            doc["compact"] = self._compact_text(doc["text"])
+            doc_freq.update(terms.keys())
 
-        Args:
-            question: The question text.
-            top_k: Number of snippets to return (default: RAG_TOP_K).
+        total_docs = max(len(self.documents), 1)
+        self.avg_doc_len = max(total_terms / total_docs, 1.0)
+        self.idf = {
+            term: math.log((1 + total_docs) / (1 + freq)) + 1.0
+            for term, freq in doc_freq.items()
+        }
 
-        Returns:
-            List of dicts with 'text' and 'source' keys.
-        """
-        if top_k is None:
-            top_k = RAG_TOP_K
+    def retrieve(self, question, context_count=None):
+        """Retrieve relevant knowledge snippets for a question."""
+        if context_count is None:
+            context_count = RAG_CONTEXT_COUNT
 
         if not self.documents:
             return []
 
-        # Extract domain keywords from the question
+        query_terms = Counter(self._tokenize(question))
         found_keywords = self._extract_keywords(question)
+        found_phrases = self._extract_question_phrases(question)
+        if not query_terms and not found_keywords:
+            return []
 
-        # Score each document
-        q_lower = question.lower()
-        scored = []
+        candidates = []
         for doc in self.documents:
-            doc_lower = doc["text"].lower()
+            relevance = self._compute_relevance(
+                query_terms, found_keywords, found_phrases, doc
+            )
+            if relevance > 0:
+                candidates.append((relevance, doc))
 
-            # Base score: fuzzy sequence similarity
-            score = SequenceMatcher(None, q_lower, doc_lower).ratio()
+        candidates.sort(key=lambda item: item[0], reverse=True)
+        return self._build_results(candidates, context_count)
 
-            # Bonus for keyword matches (space-insensitive)
-            doc_norm = doc_lower.replace(" ", "")
-            for kw in found_keywords:
-                if kw.lower().replace(" ", "") in doc_norm:
-                    score += 0.25
+    def _compute_relevance(self, query_terms, found_keywords, found_phrases, doc):
+        relevance = 0.0
+        k1 = 1.4
+        b = 0.75
+        doc_len = doc.get("term_total", 1)
+        for term, query_freq in query_terms.items():
+            doc_freq = doc["terms"].get(term, 0)
+            if not doc_freq:
+                continue
+            term_weight = self.idf.get(term, 1.0)
+            length_factor = k1 * (1.0 - b + b * doc_len / self.avg_doc_len)
+            relevance += term_weight * doc_freq * (k1 + 1.0) / (
+                doc_freq + length_factor
+            )
+            if query_freq > 1:
+                relevance += 0.15 * min(query_freq, 3) * term_weight
 
-            scored.append((score, doc))
+        doc_compact = doc["compact"]
+        for kw in found_keywords:
+            kw_compact = self._compact_text(kw)
+            if kw_compact and kw_compact in doc_compact:
+                relevance += 4.0 + min(len(kw_compact), 12) * 0.35
 
-        # Sort by score descending, return top_k
-        scored.sort(key=lambda x: x[0], reverse=True)
+        for phrase in found_phrases:
+            if phrase in doc_compact:
+                relevance += 3.0 + min(len(phrase), 12) * 0.25
 
+        return relevance * doc.get("weight", 1.0)
+
+    def _build_results(self, candidates, context_count):
         results = []
-        for _, doc in scored[:top_k]:
-            # Truncate long snippets
+        used_chars = 0
+        seen = set()
+        source_without_page_counts = Counter()
+
+        for _, doc in candidates:
+            if len(results) >= context_count or used_chars >= MAX_RAG_TOTAL_CHARS:
+                break
+
             text = doc["text"]
-            if len(text) > MAX_RAG_CHARS:
-                text = text[:MAX_RAG_CHARS] + "..."
-            results.append({"text": text, "source": doc["source"]})
+            source = doc["source"]
+            page_start = doc.get("page_start")
+            dedupe_key = (doc["source"], doc.get("page_start"), text[:80])
+            if dedupe_key in seen:
+                continue
+
+            if page_start is None and source_without_page_counts[source] >= 2:
+                continue
+
+            seen.add(dedupe_key)
+
+            remaining = MAX_RAG_TOTAL_CHARS - used_chars
+            limit = min(MAX_RAG_CHARS, remaining)
+            if limit <= 120:
+                break
+            if len(text) > limit:
+                suffix = "..."
+                text = text[:limit - len(suffix)].rstrip() + suffix
+
+            used_chars += len(text)
+            if page_start is None:
+                source_without_page_counts[source] += 1
+            results.append({
+                "text": text,
+                "source": source,
+                "section": doc.get("section") or "",
+                "page_start": page_start,
+                "page_end": doc.get("page_end"),
+            })
 
         return results
 
     def _extract_keywords(self, text):
-        """Extract domain-specific keywords found in the text.
-
-        Matching is space-insensitive so that "Gram 矩阵" matches "Gram矩阵".
-        """
+        """Extract course keywords found in the question."""
         found = []
-        # Normalize: remove spaces for matching
-        text_norm = text.lower().replace(" ", "")
+        text_norm = self._compact_text(text)
         for kw in DOMAIN_KEYWORDS:
-            kw_norm = kw.lower().replace(" ", "")
-            if kw_norm in text_norm:
+            kw_norm = self._compact_text(kw)
+            if kw_norm and kw_norm in text_norm:
                 found.append(kw)
         return found
+
+    def _extract_question_phrases(self, text):
+        phrases = set()
+        normalized = self._normalize_text(text)
+        for run in re.findall(r"[\u4e00-\u9fff]{4,}", normalized):
+            max_size = min(8, len(run))
+            for size in range(4, max_size + 1):
+                for start in range(0, len(run) - size + 1, 2):
+                    phrases.add(run[start:start + size])
+        return phrases
+
+    def _tokenize(self, text):
+        text = self._normalize_text(text).lower()
+        tokens = re.findall(r"[a-z0-9]+(?:[-_][a-z0-9]+)*", text)
+        for run in re.findall(r"[\u4e00-\u9fff]+", text):
+            tokens.extend(run)
+            tokens.extend(run[i:i + 2] for i in range(len(run) - 1))
+        return tokens
+
+    def _compact_text(self, text):
+        return re.sub(r"\s+", "", self._normalize_text(text).lower())
+
+    def _normalize_text(self, text):
+        text = unicodedata.normalize("NFKC", text or "")
+        text = text.translate(RADICAL_REPLACEMENTS)
+        text = text.replace("α", " alpha ").replace("β", " beta ")
+        text = text.replace("γ", " gamma ").replace("δ", " delta ")
+        text = text.replace("ε", " epsilon ")
+        return re.sub(r"[ \t\r\f\v]+", " ", text)
+
+    def _guess_section(self, text):
+        for line in text.splitlines():
+            line = line.strip()
+            if line.startswith("【") and line.endswith("】"):
+                return line.strip("【】")
+            if line.startswith("==="):
+                return line.strip("= ").strip()
+        return ""
+
+    def _is_section_heading(self, line):
+        return (
+            (line.startswith("【") and line.endswith("】"))
+            or (line.startswith("===") and line.endswith("==="))
+        )
