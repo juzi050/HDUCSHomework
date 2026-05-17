@@ -1,6 +1,7 @@
 """Generate answer using greedy decoding for deterministic, fast output."""
 
 import re
+from difflib import SequenceMatcher
 
 import torch
 
@@ -11,6 +12,7 @@ from .config import (
     TOP_K,
     DO_SAMPLE,
     REPETITION_PENALTY,
+    NO_REPEAT_NGRAM_SIZE,
 )
 
 
@@ -30,6 +32,7 @@ def generate_answer(model, tokenizer, inputs):
             "max_new_tokens": MAX_NEW_TOKENS,
             "do_sample": DO_SAMPLE,
             "repetition_penalty": REPETITION_PENALTY,
+            "no_repeat_ngram_size": NO_REPEAT_NGRAM_SIZE,
             "pad_token_id": tokenizer.pad_token_id,
             "eos_token_id": tokenizer.eos_token_id,
         }
@@ -50,7 +53,7 @@ def generate_answer(model, tokenizer, inputs):
 
 
 def _postprocess_answer(answer):
-    """Normalize generated text and add a minimal complete ending if needed."""
+    """Normalize generated text, remove repeated sentences, and ensure closure."""
     text = (answer or "").strip()
     if not text:
         return "总结：根据现有资料暂时无法形成可靠回答。"
@@ -59,24 +62,110 @@ def _postprocess_answer(answer):
     raw_lines = [line.strip() for line in text.splitlines()]
 
     lines = []
-    previous = None
+    seen_sentences = []
+    seen_titles = set()
+    saw_summary = False
     for line in raw_lines:
         if not line:
             if lines and lines[-1]:
                 lines.append("")
             continue
-        if line == previous:
+        if _is_repeated_title(line, seen_titles):
             continue
-        lines.append(line)
-        previous = line
+        cleaned = _dedupe_sentences(line, seen_sentences)
+        if not cleaned:
+            continue
+        lines.append(cleaned)
+        if cleaned.startswith("总结："):
+            saw_summary = True
+            break
 
     text = "\n".join(lines).strip()
-    if not _has_summary_line(text):
+    if saw_summary:
+        text = _keep_first_summary(text)
+    elif not _has_summary_line(text):
+        summary = _build_fallback_summary(text)
         text = text.rstrip("。；;，, \n")
-        text = "{}\n总结：以上要点概括了问题的核心结论和主要依据。".format(text)
+        text = "{}\n总结：{}".format(text, summary)
     return text
 
 
 def _has_summary_line(text):
     lines = [line.strip() for line in text.splitlines() if line.strip()]
     return bool(lines and lines[-1].startswith("总结："))
+
+
+def _is_repeated_title(line, seen_titles):
+    title = line.strip()
+    if not re.fullmatch(r"[一二三四五六七八九十\d、.．\s-]*[\u4e00-\u9fffA-Za-z/]{2,12}[:：]", title):
+        return False
+    key = re.sub(r"[\s\d一二三四五六七八九十、.．-]+", "", title)
+    if key in seen_titles:
+        return True
+    seen_titles.add(key)
+    return False
+
+
+def _dedupe_sentences(line, seen_sentences):
+    pieces = _split_sentences(line)
+    kept = []
+    for piece in pieces:
+        key = _sentence_key(piece)
+        if key and _is_seen_sentence(key, seen_sentences):
+            continue
+        if key:
+            seen_sentences.append(key)
+        kept.append(piece)
+    return "".join(kept).strip()
+
+
+def _split_sentences(line):
+    return re.findall(r".+?[。！？；;!?]|.+$", line)
+
+
+def _sentence_key(sentence):
+    sentence = sentence.strip()
+    if len(sentence) < 14 or _looks_like_formula(sentence):
+        return ""
+    key = re.sub(r"^[\d一二三四五六七八九十、.．\s-]+", "", sentence)
+    key = re.sub(r"^[\u4e00-\u9fffA-Za-z/]{2,8}[:：]", "", key)
+    key = re.sub(r"[，,。；;：:\s（）()、\"'“”‘’]", "", key.lower())
+    if len(key) < 10:
+        return ""
+    return key
+
+
+def _is_seen_sentence(key, seen_sentences):
+    for old_key in seen_sentences:
+        if key == old_key:
+            return True
+        short, long = sorted((key, old_key), key=len)
+        if len(short) >= 16 and short in long:
+            return True
+        if SequenceMatcher(None, key, old_key).ratio() >= 0.94:
+            return True
+    return False
+
+
+def _looks_like_formula(sentence):
+    return bool(re.search(r"[=+\-*/^∑Σ√≤≥<>]|\\frac|\\sum", sentence))
+
+
+def _keep_first_summary(text):
+    lines = []
+    for line in text.splitlines():
+        lines.append(line)
+        if line.strip().startswith("总结："):
+            break
+    return "\n".join(lines).strip()
+
+
+def _build_fallback_summary(text):
+    lines = [line.strip() for line in text.splitlines() if line.strip()]
+    for line in reversed(lines):
+        line = re.sub(r"^[一二三四五六七八九十\d、.．\s-]+", "", line)
+        line = re.sub(r"^[\u4e00-\u9fffA-Za-z/]{2,8}[:：]", "", line).strip()
+        line = line.rstrip("。；;，, ")
+        if len(line) >= 8 and line != "总结":
+            return line
+    return "根据上文可得出这一题的核心结论。"

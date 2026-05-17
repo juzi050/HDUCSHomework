@@ -125,6 +125,46 @@ DOMAIN_KEYWORDS = [
     "NVLink", "InfiniBand", "RoCE",
 ]
 
+TOPIC_PROFILES = {
+    "style_transfer": {
+        "query": ["风格迁移", "VGG", "VGG19", "Gram", "内容损失", "风格损失", "内容图", "风格图", "im2col"],
+        "doc": ["风格迁移", "VGG19", "Gram矩阵", "内容损失", "风格损失", "总损失", "relu4_2", "ALPHA", "BETA"],
+        "sources": ["style_transfer.txt"],
+    },
+    "rnn": {
+        "query": ["RNN", "LSTM", "GRU", "CharRNN", "循环神经网络", "长短期记忆", "门控循环单元", "隐状态"],
+        "doc": ["CharRNN", "RNN 单元", "LSTM 单元", "GRU 单元", "隐状态", "细胞状态", "困惑度", "训练配置"],
+        "sources": ["rnn_experiment.txt"],
+    },
+    "transformer": {
+        "query": ["Transformer", "注意力", "自注意力", "多头注意力", "Seq2Seq", "编码器", "解码器"],
+        "doc": ["Transformer", "注意力机制", "自注意力", "自注意力层", "缩放点积注意力", "多头注意力", "编码器", "解码器", "位置编码", "注意力权重"],
+        "sources": ["textbook_v2", "advanced_topics.txt"],
+    },
+    "processor": {
+        "query": ["处理器", "DLP", "GPU", "TPU", "脉动阵列", "SIMD", "SIMT", "Scratchpad", "Roofline"],
+        "doc": ["深度学习处理器", "矩阵运算单元", "脉动阵列", "便笺存储器", "片上存储", "Roofline", "SIMD", "SIMT"],
+        "sources": ["textbook_v2", "advanced_topics.txt"],
+    },
+    "debug_tuning": {
+        "query": ["调试", "调优", "性能", "精度", "梯度检查", "混合精度", "算子融合", "内存优化"],
+        "doc": ["功能调试", "精度调试", "性能调优", "梯度检查", "算子融合", "混合精度", "内存优化", "数据加载"],
+        "sources": ["textbook_v2", "advanced_topics.txt"],
+    },
+    "framework": {
+        "query": ["PyTorch", "TensorFlow", "编程框架", "计算图", "动态图", "静态图", "算子", "分布式训练"],
+        "doc": ["编程框架", "计算图", "动态图", "静态图", "PyTorch", "TensorFlow", "算子注册", "分派器", "All-Reduce"],
+        "sources": ["textbook_v2", "advanced_topics.txt"],
+    },
+}
+
+SOURCE_WEIGHTS = {
+    "style_transfer.txt": 1.8,
+    "rnn_experiment.txt": 1.8,
+    "advanced_topics.txt": 1.15,
+    "dl_fundamentals.txt": 1.3,
+}
+
 
 class RAGEngine:
     """Simple local retriever for course material."""
@@ -210,7 +250,7 @@ class RAGEngine:
             "section": section or self._guess_section(text),
             "page_start": None,
             "page_end": None,
-            "weight": 2.0,
+            "weight": self._source_weight(fname),
         })
 
     def _load_jsonl_file(self, fpath, fname):
@@ -233,7 +273,7 @@ class RAGEngine:
                         "section": item.get("section") or "",
                         "page_start": item.get("page_start"),
                         "page_end": item.get("page_end"),
-                        "weight": 1.0,
+                        "weight": self._source_weight(item.get("source") or fname),
                     })
         except Exception:
             return
@@ -267,13 +307,14 @@ class RAGEngine:
         query_terms = Counter(self._tokenize(question))
         found_keywords = self._extract_keywords(question)
         found_phrases = self._extract_question_phrases(question)
+        found_topics = self._detect_topics(question)
         if not query_terms and not found_keywords:
             return []
 
         candidates = []
         for doc in self.documents:
             relevance = self._compute_relevance(
-                query_terms, found_keywords, found_phrases, doc
+                query_terms, found_keywords, found_phrases, found_topics, doc
             )
             if relevance > 0:
                 candidates.append((relevance, doc))
@@ -281,7 +322,7 @@ class RAGEngine:
         candidates.sort(key=lambda item: item[0], reverse=True)
         return self._build_results(candidates, context_count)
 
-    def _compute_relevance(self, query_terms, found_keywords, found_phrases, doc):
+    def _compute_relevance(self, query_terms, found_keywords, found_phrases, found_topics, doc):
         relevance = 0.0
         k1 = 1.4
         b = 0.75
@@ -308,7 +349,39 @@ class RAGEngine:
             if phrase in doc_compact:
                 relevance += 3.0 + min(len(phrase), 12) * 0.25
 
+        relevance += self._topic_bonus(found_topics, doc)
         return relevance * doc.get("weight", 1.0)
+
+    def _detect_topics(self, text):
+        text_compact = self._compact_text(text)
+        topics = []
+        for topic, profile in TOPIC_PROFILES.items():
+            for marker in profile["query"]:
+                marker_compact = self._compact_text(marker)
+                if marker_compact and marker_compact in text_compact:
+                    topics.append(topic)
+                    break
+        return topics
+
+    def _topic_bonus(self, found_topics, doc):
+        if not found_topics:
+            return 0.0
+
+        source = doc.get("source", "").lower()
+        doc_compact = doc["compact"]
+        bonus = 0.0
+        for topic in found_topics:
+            profile = TOPIC_PROFILES[topic]
+            if source in profile.get("sources", []):
+                bonus += 3.0
+            hits = 0
+            for marker in profile["doc"]:
+                marker_compact = self._compact_text(marker)
+                if marker_compact and marker_compact in doc_compact:
+                    hits += 1
+            if hits:
+                bonus += min(4.0, 1.2 + hits * 0.6)
+        return bonus
 
     def _build_results(self, candidates, context_count):
         results = []
@@ -327,7 +400,8 @@ class RAGEngine:
             if dedupe_key in seen:
                 continue
 
-            if page_start is None and source_without_page_counts[source] >= 2:
+            source_limit = 2 if source.endswith(".txt") else 1
+            if page_start is None and source_without_page_counts[source] >= source_limit:
                 continue
 
             seen.add(dedupe_key)
@@ -406,3 +480,6 @@ class RAGEngine:
             (line.startswith("【") and line.endswith("】"))
             or (line.startswith("===") and line.endswith("==="))
         )
+
+    def _source_weight(self, source):
+        return SOURCE_WEIGHTS.get(source, 1.0)
