@@ -9,8 +9,8 @@ ROOT = Path(__file__).resolve().parents[1]
 DOC_PATH = ROOT / "1 系统需求分析模板.doc"
 IMG_DIR = ROOT / "artifacts" / "screenshots"
 SQL_DIR = ROOT / "sql"
-STUDENT_ID = "24051220"
-STUDENT_NAME = "张昌豪"
+STUDENT_ID = "<学号>"
+STUDENT_NAME = "<姓名>"
 
 
 def read_text(path: Path) -> str:

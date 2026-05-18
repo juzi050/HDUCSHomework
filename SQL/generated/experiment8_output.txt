@@ -1,0 +1,121 @@
+Changed database context to 'GradeManager'.
+【实验八】完整性约束的实现
+Item
+----
+习题4第11题：四个表已加入主键、外键、CHECK、DEFAULT等完整性约束
+
+(1 rows affected)
+TABLE_NAME CONSTRAINT_TYPE CONSTRAINT_NAME
+---------- --------------- ---------------
+Class CHECK CK_Class_Number
+Class FOREIGN KEY FK_Class_Monitor
+Class PRIMARY KEY PK_Class
+Course CHECK CK_Course_Ccredit
+Course FOREIGN KEY FK_Course_PreCourse
+Course PRIMARY KEY PK_Course
+Grade CHECK CK_Grade_Gmark
+Grade FOREIGN KEY FK_Grade_Course
+Grade FOREIGN KEY FK_Grade_Student
+Grade PRIMARY KEY PK_Grade
+Student CHECK CK_Student_Sbirth
+Student CHECK CK_Student_Ssex
+Student FOREIGN KEY FK_Student_Class
+Student PRIMARY KEY PK_Student
+
+(14 rows affected)
+Item
+----
+验证用户自定义完整性：课程学分只能为1到6
+
+(1 rows affected)
+
+(0 rows affected)
+ErrorNumber ErrorMessage
+----------- ------------
+547 The INSERT statement conflicted with the CHECK constraint "CK_Course_Ccredit". The conflict occurred in database "GradeManager", table "dbo.Course", column 'Ccredit'.
+
+(1 rows affected)
+
+(8 rows affected)
+Item
+----
+习题4第12题：插入/删除Student时，Class.Number自动维护
+
+(1 rows affected)
+Stage Clno Number
+----- ---- ------
+插入前 20311 35
+
+(1 rows affected)
+
+(1 rows affected)
+Stage Clno Number
+----- ---- ------
+插入后 20311 36
+
+(1 rows affected)
+
+(1 rows affected)
+Stage Clno Number
+----- ---- ------
+删除后 20311 35
+
+(1 rows affected)
+Item
+----
+习题4第15题：班级人数超过40人时回滚
+
+(1 rows affected)
+
+(0 rows affected)
+ErrorNumber ErrorMessage
+----------- ------------
+50000 该班学生人数超过40人，操作回滚。
+
+(1 rows affected)
+Clno Number
+---- ------
+21311 40
+
+(1 rows affected)
+Item
+----
+习题4第13题：班长必须为本班学生
+
+(1 rows affected)
+
+(0 rows affected)
+ErrorNumber ErrorMessage
+----------- ------------
+50000 班长学号必须属于本班学生，更新取消。
+
+(1 rows affected)
+
+(1 rows affected)
+Clno Monitor
+---- -------
+20311 2020102
+
+(1 rows affected)
+Item
+----
+习题4第14题：成绩达到60分后才获得该课程学分
+
+(1 rows affected)
+Stage Sno Sname EarnedCredit
+----- --- ----- ------------
+修改前 2020104 张婷婷 2
+
+(1 rows affected)
+
+(1 rows affected)
+Stage Sno Sname EarnedCredit
+----- --- ----- ------------
+事务内修改后 2020104 张婷婷 6
+
+(1 rows affected)
+Stage Sno Sname EarnedCredit
+----- --- ----- ------------
+回滚后 2020104 张婷婷 2
+
+(1 rows affected)

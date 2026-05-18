@@ -1,0 +1,67 @@
+Changed database context to 'GradeManager'.
+【实验十】创建存储过程和用户自定义函数
+Item
+----
+习题5第17题：按学号查询该学生所有选修课成绩的存储过程
+
+(1 rows affected)
+Sno Sname Cno Cname Gmark
+--- ----- --- ----- -----
+2020103 王一鸣 1   数据库系统原理 83.0
+2020103 王一鸣 2   计算机系统结构 76.0
+2020103 王一鸣 3   数字电路设计 65.0
+2020103 王一鸣 4   操作系统 56.0
+2020103 王一鸣 5   数据结构 66.0
+2020103 王一鸣 6   软件工程 78.0
+2020103 王一鸣 7   C语言 88.0
+Item
+----
+习题5第18题：按班级号判断该班是否有学生的存储过程
+
+(1 rows affected)
+Clno HasStudent
+---- ----------
+20312 1
+
+(1 rows affected)
+Clno HasStudent
+---- ----------
+99999 0
+
+(1 rows affected)
+Item
+----
+习题5第19题：按学号输出姓名和专业的存储过程
+
+(1 rows affected)
+Sno Sname Speciality
+--- ----- ----------
+2020103 王一鸣 计算机科学与技术
+
+(1 rows affected)
+Item
+----
+习题5第20题：将第17-19题改写为用户自定义函数
+
+(1 rows affected)
+Sno Sname Cno Cname Gmark
+--- ----- --- ----- -----
+2020103 王一鸣 1   数据库系统原理 83.0
+2020103 王一鸣 2   计算机系统结构 76.0
+2020103 王一鸣 3   数字电路设计 65.0
+2020103 王一鸣 4   操作系统 56.0
+2020103 王一鸣 5   数据结构 66.0
+2020103 王一鸣 6   软件工程 78.0
+2020103 王一鸣 7   C语言 88.0
+
+(7 rows affected)
+Clno HasStudent EmptyClno EmptyClassHasStudent
+---- ---------- --------- --------------------
+20312 1 99999 0
+
+(1 rows affected)
+Sno Sname Speciality
+--- ----- ----------
+2020103 王一鸣 计算机科学与技术
+
+(1 rows affected)

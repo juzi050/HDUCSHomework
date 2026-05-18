@@ -20,8 +20,10 @@ from PIL import Image, ImageDraw, ImageFont
 ROOT = Path(__file__).resolve().parents[2]
 SQL_DIR = ROOT / "SQL"
 OUT_DIR = SQL_DIR / "generated"
-REPORT_PATH = SQL_DIR / "《数据库系统原理》课程实验报告模板2_张昌豪_24051220.docx"
-PDF_PATH = OUT_DIR / "《数据库系统原理》课程实验报告模板2_张昌豪_24051220.pdf"
+STUDENT_ID = os.environ.get("SQL_REPORT_STUDENT_ID", "<学号>")
+STUDENT_NAME = os.environ.get("SQL_REPORT_STUDENT_NAME", "<姓名>")
+REPORT_PATH = SQL_DIR / "《数据库系统原理》课程实验报告模板2_模板.docx"
+PDF_PATH = OUT_DIR / "《数据库系统原理》课程实验报告模板2_模板.pdf"
 RENDER_DIR = OUT_DIR / "rendered_pages"
 
 CONTAINER = "sql2022-lab"
@@ -802,8 +804,8 @@ def build_report(outputs: dict[str, str], images: dict[str, list[Path]], sql_pat
         doc.add_paragraph()
     for line in [
         "主题名称：      第2次SQL实验报告",
-        "学    号：      24051220",
-        "姓    名：      张昌豪",
+        f"学    号：      {STUDENT_ID}",
+        f"姓    名：      {STUDENT_NAME}",
         "实验环境：      Docker SQL Server 2022 Express（容器 sql2022-lab，localhost:14333）",
     ]:
         p = doc.add_paragraph()

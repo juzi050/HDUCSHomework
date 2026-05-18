@@ -1,0 +1,113 @@
+Changed database context to 'GradeManager'.
+【实验九】安全性的实现
+Item
+----
+习题4第17题(1)：张勇获得Student、Course查询权限
+
+(1 rows affected)
+Item
+----
+习题4第17题(2)：张勇获得Student插入、删除权限且可再授权
+
+(1 rows affected)
+Item
+----
+习题4第17题(3)：李勇获得Course查询权限和Ccredit修改权限
+
+(1 rows affected)
+Item
+----
+习题4第17题(4)：李勇敏获得Student全部数据操作权限且可再授权
+
+(1 rows affected)
+Item
+----
+授权结果查询
+
+(1 rows affected)
+Grantee permission_name state_desc ObjectName ColumnName
+------- --------------- ---------- ---------- ----------
+李勇 CONNECT GRANT NULL NULL
+李勇 SELECT GRANT Course NULL
+李勇 UPDATE GRANT Course Ccredit
+李勇 DELETE GRANT Student NULL
+李勇 INSERT GRANT Student NULL
+李勇 SELECT GRANT Student NULL
+李勇敏 CONNECT GRANT NULL NULL
+李勇敏 DELETE GRANT_WITH_GRANT_OPTION Student NULL
+李勇敏 INSERT GRANT_WITH_GRANT_OPTION Student NULL
+李勇敏 SELECT GRANT_WITH_GRANT_OPTION Student NULL
+李勇敏 UPDATE GRANT_WITH_GRANT_OPTION Student NULL
+张勇 CONNECT GRANT NULL NULL
+张勇 SELECT GRANT Course NULL
+张勇 DELETE GRANT_WITH_GRANT_OPTION Student NULL
+张勇 INSERT GRANT_WITH_GRANT_OPTION Student NULL
+张勇 SELECT GRANT Student NULL
+
+(16 rows affected)
+Item
+----
+习题4第17题(5)：撤销张勇在Student、Course上的查询权限
+
+(1 rows affected)
+Item
+----
+习题4第17题(6)：撤销张勇Student插入、删除权限，并级联撤销其再授权结果
+
+(1 rows affected)
+Item
+----
+撤销后结果查询
+
+(1 rows affected)
+Grantee permission_name state_desc ObjectName ColumnName
+------- --------------- ---------- ---------- ----------
+李勇 CONNECT GRANT NULL NULL
+李勇 SELECT GRANT Course NULL
+李勇 UPDATE GRANT Course Ccredit
+李勇 SELECT GRANT Student NULL
+李勇敏 CONNECT GRANT NULL NULL
+李勇敏 DELETE GRANT_WITH_GRANT_OPTION Student NULL
+李勇敏 INSERT GRANT_WITH_GRANT_OPTION Student NULL
+李勇敏 SELECT GRANT_WITH_GRANT_OPTION Student NULL
+李勇敏 UPDATE GRANT_WITH_GRANT_OPTION Student NULL
+张勇 CONNECT GRANT NULL NULL
+
+(10 rows affected)
+Item
+----
+习题4第17题(7)：张勇、李勇获得建表和建存储过程权限
+
+(1 rows affected)
+Item
+----
+习题4第18题：角色只能查看计算机科学与技术专业课程成绩统计视图
+
+(1 rows affected)
+Cno Cname SelectCount AvgMark MaxMark MinMark
+--- ----- ----------- ------- ------- -------
+1   数据库系统原理 2 68.50 83.0 54.0
+2   计算机系统结构 1 76.00 76.0 76.0
+3   数字电路设计 1 65.00 65.0 65.0
+4   操作系统 1 56.00 56.0 56.0
+5   数据结构 1 66.00 66.0 66.0
+6   软件工程 2 80.50 83.0 78.0
+7   C语言 1 88.00 88.0 88.0
+
+(7 rows affected)
+ErrorNumber ErrorMessage
+----------- ------------
+229 The SELECT permission was denied on the object 'Student', database 'GradeManager', schema 'dbo'.
+
+(1 rows affected)
+Item
+----
+角色成员与授权结果
+
+(1 rows affected)
+RoleName MemberName
+-------- ----------
+计算机专业负责人 李老师
+计算机专业负责人 张老师
+
+(2 rows affected)

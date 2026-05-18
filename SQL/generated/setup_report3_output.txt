@@ -1,0 +1,21 @@
+Changed database context to 'master'.
+Changed database context to 'GradeManager'.
+
+(3 rows affected)
+
+(8 rows affected)
+
+(1 rows affected)
+
+(1 rows affected)
+
+(1 rows affected)
+
+(8 rows affected)
+
+(18 rows affected)
+Info StudentRows CourseRows ClassRows GradeRows
+---- ----------- ---------- --------- ---------
+GradeManager 实验8-10初始化完成 8 8 3 18
+
+(1 rows affected)
