@@ -49,6 +49,11 @@ def generate_answer(model, tokenizer, inputs):
     generated_ids = outputs[0][input_len:]
     answer = tokenizer.decode(generated_ids, skip_special_tokens=True)
 
+    # Free GPU memory from generation
+    del outputs
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
+
     return _postprocess_answer(answer)
 
 
@@ -136,14 +141,27 @@ def _sentence_key(sentence):
 
 
 def _is_seen_sentence(key, seen_sentences):
+    # Fast path: O(1) exact match lookup
+    if not hasattr(_is_seen_sentence, "_exact_set"):
+        _is_seen_sentence._exact_set = set()
+    exact_set = _is_seen_sentence._exact_set
+    if key in exact_set:
+        return True
+
+    # Slow path: substring containment and fuzzy matching
     for old_key in seen_sentences:
-        if key == old_key:
-            return True
         short, long = sorted((key, old_key), key=len)
         if len(short) >= 16 and short in long:
             return True
-        if SequenceMatcher(None, key, old_key).ratio() >= 0.94:
+        # Only run expensive SequenceMatcher when lengths are within 30%
+        len_ratio = len(short) / max(len(long), 1)
+        if len_ratio >= 0.7 and SequenceMatcher(None, key, old_key).ratio() >= 0.94:
             return True
+
+    exact_set.add(key)
+    # Keep seen_sentences list capped to avoid unbounded growth
+    if len(seen_sentences) > 60:
+        seen_sentences[:] = seen_sentences[-40:]
     return False
 
 

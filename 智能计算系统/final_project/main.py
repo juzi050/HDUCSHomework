@@ -12,12 +12,15 @@ and must not be empty.
 
 import sys
 import time
+import gc
 
 # Add the project root to sys.path so relative imports work when run as script
 import os
 _project_root = os.path.dirname(os.path.abspath(__file__))
 if _project_root not in sys.path:
     sys.path.insert(0, _project_root)
+
+import torch
 
 from src.config import SYSTEM_PROMPT
 from src.model_loader import load_model_and_tokenizer
@@ -68,6 +71,12 @@ def main():
     # Generate answer
     print("[INFO] Generating answer...", file=sys.stderr)
     answer = generate_answer(model, tokenizer, inputs)
+
+    # Free input tensors and GPU memory
+    del inputs
+    gc.collect()
+    if torch.cuda.is_available():
+        torch.cuda.empty_cache()
 
     elapsed = time.perf_counter() - start_time
     print("[INFO] Inference completed in {:.2f}s".format(elapsed), file=sys.stderr)
