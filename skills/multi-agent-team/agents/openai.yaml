@@ -1,0 +1,4 @@
+interface:
+  display_name: "Multi-Agent Team"
+  short_description: "Run gated multi-agent coding workflows"
+  default_prompt: "Use $multi-agent-team to execute this development request with isolated worktrees, review, integration testing, merge, and final verification."
