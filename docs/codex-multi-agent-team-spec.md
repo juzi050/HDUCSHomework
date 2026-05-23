@@ -10,7 +10,7 @@ This spec is intended for requests that involve frontend work, backend work, cod
 
 1. The main Codex session acts as the Controller.
 2. The Controller MUST start with the Architect Agent.
-3. The Architect Agent MUST clarify the user's requirements before implementation starts.
+3. The Architect Agent MUST clarify requirement gaps that affect implementation, acceptance criteria, data contracts, or safety boundaries before implementation starts.
 4. Unless the Architect Agent explicitly determines that a role is not applicable, the Controller MUST use these agents:
    - Architect Agent
    - Frontend Agent
@@ -19,11 +19,12 @@ This spec is intended for requests that involve frontend work, backend work, cod
    - Test Agent
    - Merge Agent
 5. The Merge Agent MUST NOT start until code review has passed first and integration testing has passed afterward.
-6. Every agent that writes code MUST work in an isolated Git worktree.
-7. Any failed gate MUST send the work back to the responsible agent, and the workflow MUST repeat until the gate passes.
-8. The workflow MUST NOT stop after a partial implementation, a plan, or a local success claim.
-9. After merge, the Architect Agent MUST dispatch an independent verification subagent to inspect the real current codebase and decide whether the original request is fully implemented.
-10. No agent may revert user changes or unrelated changes made by other agents. Agents MUST adapt to existing changes unless explicitly instructed otherwise.
+6. The Controller MUST NOT start the Test Agent before code review passes, and MUST NOT start the Merge Agent before integration testing passes.
+7. Every agent that writes code MUST work in an isolated Git worktree.
+8. Any failed gate MUST send the work back to the responsible agent, and the workflow MUST repeat until the gate passes.
+9. The workflow MUST NOT stop after a partial implementation, a plan, or a local success claim.
+10. After merge, the Architect Agent MUST dispatch an independent verification subagent to inspect the real current codebase and decide whether the original request is fully implemented.
+11. No agent may revert user changes or unrelated changes made by other agents. Agents MUST adapt to existing changes unless explicitly instructed otherwise.
 
 ## Git Worktree Isolation
 
@@ -32,22 +33,23 @@ Each coding agent MUST use its own branch and worktree.
 Recommended PowerShell pattern:
 
 ```powershell
-git worktree add ..\<repo-name>-worktrees\<task-id>-frontend -b codex\<task-id>\frontend master
-git worktree add ..\<repo-name>-worktrees\<task-id>-backend -b codex\<task-id>\backend master
-git worktree add ..\<repo-name>-worktrees\<task-id>-review -b codex\<task-id>\review master
-git worktree add ..\<repo-name>-worktrees\<task-id>-test -b codex\<task-id>\test master
-git worktree add ..\<repo-name>-worktrees\<task-id>-merge -b codex\<task-id>\merge master
+git worktree add ..\<repo-name>-worktrees\<task-id>-frontend -b codex\<task-id>\frontend <base-branch>
+git worktree add ..\<repo-name>-worktrees\<task-id>-backend -b codex\<task-id>\backend <base-branch>
+git worktree add ..\<repo-name>-worktrees\<task-id>-review -b codex\<task-id>\review <base-branch>
+git worktree add ..\<repo-name>-worktrees\<task-id>-test -b codex\<task-id>\test <base-branch>
+git worktree add ..\<repo-name>-worktrees\<task-id>-merge -b codex\<task-id>\merge <base-branch>
 ```
 
 Rules:
 
 1. `<task-id>` MUST be created by the Architect Agent and use kebab-case, such as `user-login`.
-2. Every agent MUST run `git status --short` before reporting completion.
-3. Frontend and Backend Agents MUST only edit files within their assigned ownership scope.
-4. The Test Agent SHOULD primarily add or update tests, fixtures, integration scripts, or test harnesses. It SHOULD NOT rewrite frontend or backend implementation code unless the Controller explicitly approves a small test-enabling fix.
-5. The Review Agent reviews by default. It SHOULD NOT directly rewrite implementation code unless the change is a tiny documentation or formatting fix.
-6. The Merge Agent only integrates branches that already passed review and testing. It MUST NOT add new business behavior.
-7. If the repository uses `main` instead of `master`, the Architect Agent MUST explicitly state the branch substitution before any worktree is created.
+2. `<base-branch>` MUST be detected and recorded by the Architect Agent before any worktree is created.
+3. Every agent MUST run `git status --short` before reporting completion.
+4. Every gate report MUST include the relevant commit SHA, so review, testing, merge, and final verification refer to the exact code revision that passed.
+5. Frontend and Backend Agents MUST only edit files within their assigned ownership scope.
+6. The Test Agent SHOULD primarily add or update tests, fixtures, integration scripts, or test harnesses. It SHOULD NOT rewrite frontend or backend implementation code unless the Controller explicitly approves a small test-enabling fix.
+7. The Review Agent reviews by default. It SHOULD NOT directly rewrite implementation code unless the change is a tiny documentation or formatting fix.
+8. The Merge Agent only integrates branches that already passed review and testing. It MUST NOT add new business behavior.
 
 ## Team Roles
 
@@ -56,19 +58,23 @@ Rules:
 Responsibilities:
 
 1. Read the user request and inspect the current codebase.
-2. Identify all unclear points that affect implementation, architecture, testing, or acceptance.
-3. Ask the user questions through the Controller until the requirements, boundaries, and acceptance criteria are clear enough to implement.
-4. If the user cannot answer a question, define the smallest reasonable assumption and include it in the acceptance criteria.
-5. Split the request into frontend, backend, review, testing, and merge tasks.
-6. Define the API contract or module contract between frontend and backend.
-7. Define ownership scopes and forbidden edit areas for each coding agent.
-8. After merge, dispatch an independent verification subagent to inspect the real current codebase and judge whether the feature is complete.
+2. Detect and record the real `<base-branch>` before any worktree is created.
+3. Identify unclear points that affect implementation, architecture, testing, acceptance, data contracts, or safety boundaries.
+4. Ask the user questions through the Controller until those material requirements are clear enough to implement.
+5. If the user cannot answer a low-risk detail, define the smallest reasonable assumption and include it in the acceptance criteria.
+6. Split the request into frontend, backend, review, testing, and merge tasks.
+7. Define the API contract or module contract between frontend and backend.
+8. Define ownership scopes and forbidden edit areas for each coding agent.
+9. After merge, dispatch an independent verification subagent to inspect the real current codebase and judge whether the feature is complete.
 
 Required output:
 
 ```text
 Requirement summary:
 - ...
+
+Base branch:
+- <base-branch>
 
 Acceptance criteria:
 - ...
@@ -93,7 +99,7 @@ Ownership:
 - Forbidden areas:
 ```
 
-The Architect Agent MUST NOT allow implementation to start while requirement gaps still affect the solution or acceptance criteria.
+The Architect Agent MUST NOT allow implementation to start while unresolved requirement gaps still affect the solution, acceptance criteria, data contract, or safety boundary.
 
 ### 2. Frontend Agent
 
@@ -113,6 +119,7 @@ Frontend completion report:
 - Mock data/API used:
 - Self-test command:
 - Self-test result:
+- Self-tested commit:
 - Implemented contract fields:
 - Known limitations:
 ```
@@ -141,6 +148,7 @@ Backend completion report:
 - Mock request/fixture/dependency used:
 - Self-test command:
 - Self-test result:
+- Self-tested commit:
 - Implemented API/module contract:
 - Error behavior:
 - Known limitations:
@@ -156,7 +164,7 @@ Constraints:
 
 Responsibilities:
 
-1. Receive the reviewed frontend and backend branches after the Review Agent has passed them.
+1. Receive the reviewed frontend and backend branches and the exact approved commit SHAs after the Review Agent has passed them.
 2. Integrate the reviewed frontend and backend branches in the test worktree.
 3. Run integration tests, contract tests, end-to-end tests, or manual verification steps as appropriate for the project.
 4. If integration fails, identify whether the failure belongs to frontend, backend, contract mismatch, test setup, or unclear requirements.
@@ -168,6 +176,8 @@ Required report:
 ```text
 Integration test report:
 - Branches tested:
+- Tested frontend commit:
+- Tested backend commit:
 - Test commands:
 - Test result:
 - Evidence:
@@ -186,11 +196,13 @@ Constraints:
 
 Responsibilities:
 
-1. Review frontend and backend implementation code.
+1. Review frontend and backend implementation code before integration testing.
 2. Focus on over-engineering, unnecessary abstraction, needless dependencies, and whether a simpler implementation would satisfy the current requirement.
 3. Check correctness, maintainability, project style, necessary boundary handling, and test coverage.
 4. If review fails, send the relevant part back to the responsible agent with concrete required changes.
 5. If review passes, notify the Controller that integration testing may start.
+6. Use the review worktree to inspect frontend and backend diffs against `<base-branch>`, or temporarily merge the frontend and backend branches into the review worktree for read-only inspection.
+7. When reviewing rework after a failed gate, Review Agent MAY review only the rework diff, but MUST confirm the rework does not break previously approved behavior.
 
 Review criteria:
 
@@ -206,6 +218,9 @@ Required output:
 
 ```text
 Review result: pass / fail
+Reviewed scope: full implementation / rework diff
+Approved frontend commit:
+Approved backend commit:
 
 Required changes:
 - [agent] [file/module] [issue] [recommended fix]
@@ -231,13 +246,17 @@ Responsibilities:
 3. Resolve merge conflicts.
 4. If a conflict cannot be resolved safely, ask the responsible Frontend or Backend Agent for a fix or clarification.
 5. Run the full verification command set defined by the Architect Agent.
-6. Prepare the merged result for `master`.
+6. Prepare the merged result for `<base-branch>`.
 
 Required report:
 
 ```text
 Merge report:
+- Target base branch:
 - Branches merged:
+- Merged frontend commit:
+- Merged backend commit:
+- Merged test commit:
 - Conflict files:
 - Conflict resolution summary:
 - Verification commands:
@@ -249,7 +268,7 @@ Constraints:
 
 1. The Merge Agent MUST NOT remove feature behavior just to resolve conflicts.
 2. The Merge Agent MUST NOT add new feature behavior.
-3. If the repository uses `main` instead of `master`, use the Architect Agent's stated branch substitution.
+3. The Merge Agent MUST use the Architect Agent's recorded `<base-branch>`.
 
 ## Workflow
 
@@ -257,7 +276,7 @@ Constraints:
 
 1. Controller starts the Architect Agent.
 2. Architect Agent inspects the request and current codebase.
-3. Architect Agent lists unclear points that affect implementation or acceptance.
+3. Architect Agent lists unclear points that affect implementation, acceptance, data contracts, or safety boundaries.
 4. Controller asks the user those questions.
 5. Architect Agent updates the requirement summary after the user answers.
 6. Repeat until the Architect Agent confirms the request is implementable.
@@ -265,10 +284,11 @@ Constraints:
 Exit gate:
 
 1. Requirement summary is written.
-2. Acceptance criteria are written.
-3. Task split is written.
-4. API/module contract is written.
-5. Ownership scopes are written.
+2. `<base-branch>` is detected and written.
+3. Acceptance criteria are written.
+4. Task split is written.
+5. API/module contract is written.
+6. Ownership scopes are written.
 
 ### Phase 2: Parallel Implementation
 
@@ -282,7 +302,9 @@ Exit gate:
 
 1. Frontend mock self-test passed.
 2. Backend mock self-test passed.
-3. Both agents reported their actual implemented contract details.
+3. Frontend Agent reported the self-tested frontend commit SHA.
+4. Backend Agent reported the self-tested backend commit SHA.
+5. Both agents reported their actual implemented contract details.
 
 ### Phase 3: Code Review
 
@@ -295,6 +317,7 @@ Exit gate:
 
 1. Review Agent explicitly reports `pass`.
 2. No required changes remain open.
+3. Review Agent reported the approved frontend and backend commit SHAs.
 
 ### Phase 4: Integration Testing
 
@@ -309,6 +332,7 @@ Exit gate:
 
 1. Test Agent explicitly reports integration passed.
 2. Test Agent provides commands and results.
+3. Test Agent reported the tested frontend and backend commit SHAs.
 
 ### Phase 5: Merge
 
@@ -316,13 +340,13 @@ Exit gate:
 2. Merge Agent merges the approved frontend, backend, and test branches in the merge worktree.
 3. Merge Agent resolves conflicts or requests help from the responsible agent.
 4. Merge Agent runs the full verification command set.
-5. Merge Agent prepares the result on `master`.
+5. Merge Agent prepares the result on `<base-branch>`.
 
 Exit gate:
 
 1. Merge Agent explicitly reports merge completed.
 2. Full verification passed after merge.
-3. `master` contains the approved frontend, backend, and test changes.
+3. `<base-branch>` contains the approved frontend, backend, and test changes.
 
 ### Phase 6: Independent Final Verification
 
@@ -340,7 +364,7 @@ Final completion gate:
 3. Backend mock self-test passed.
 4. Code review passed before integration testing.
 5. Frontend/backend integration passed after review.
-6. Merge to `master` succeeded.
+6. Merge to `<base-branch>` succeeded.
 7. Independent final verification passed against the real current codebase.
 
 ## Failure and Rework Rules
@@ -387,7 +411,7 @@ Verification:
 - Backend mock self-test: passed, command: ...
 - Review: passed
 - Integration test: passed, command: ...
-- Merge: completed on master
+- Merge: completed on <base-branch>
 - Independent final verification: passed
 
 Key files:
