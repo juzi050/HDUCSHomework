@@ -1,3 +1,14 @@
+#==============================================================================
+# run_all.tcl - 一键仿真+综合+实现脚本 (Experiment 4: Register File + ALU)
+#==============================================================================
+# 功能:
+#   - 调用 create_project.tcl 创建项目。
+#   - 使用 xvlog/xelab/xsim 命令行工具运行4个仿真测试平台。
+#   - 执行综合、优化、布局布线。
+#   - 生成比特流 (.bit) 和设计检查点 (.dcp)。
+#   - 输出资源利用率和时序报告。
+#==============================================================================
+
 set script_dir [file dirname [file normalize [info script]]]
 set root_dir [file normalize [file join $script_dir ".."]]
 set project_dir [file join $root_dir "vivado_project"]
@@ -6,6 +17,7 @@ set sim_build_dir [file join $root_dir "sim_build"]
 
 source [file join $script_dir "create_project.tcl"]
 
+# 查找 Vivado 命令行工具 (xvlog/xelab/xsim)
 proc find_tool {tool_name} {
     set vivado_bin [file normalize [file dirname [info nameofexecutable]]]
 
@@ -20,6 +32,7 @@ proc find_tool {tool_name} {
     error "Cannot find $tool_name near Vivado executable"
 }
 
+# 运行命令行工具
 proc run_cmd {work_dir cmd} {
     set old_dir [pwd]
     cd $work_dir
@@ -37,6 +50,7 @@ proc run_cmd {work_dir cmd} {
     }
 }
 
+# 生成 xsim 项目文件 (.prj)
 proc write_sim_project {prj_file src_files tb_file glbl_file} {
     set fp [open $prj_file "w"]
     puts $fp "# command-line xsim project"
@@ -49,6 +63,7 @@ proc write_sim_project {prj_file src_files tb_file glbl_file} {
     close $fp
 }
 
+# 运行单个测试平台
 proc run_testbench {tb_name src_files root_dir sim_build_dir xvlog xelab xsim glbl_file} {
     puts "Running simulation: $tb_name"
 
@@ -66,12 +81,14 @@ proc run_testbench {tb_name src_files root_dir sim_build_dir xvlog xelab xsim gl
     run_cmd $tb_dir [list cmd /c $xsim $snapshot --R --onerror quit --onfinish quit --log [file join $tb_dir "xsim.log"]]
 }
 
+# 查找工具
 set xvlog [find_tool "xvlog.bat"]
 set xelab [find_tool "xelab.bat"]
 set xsim [find_tool "xsim.bat"]
 set vivado_root [file normalize [file join [file dirname $xvlog] ".."]]
 set glbl_file [file join $vivado_root "data" "verilog" "src" "glbl.v"]
 
+# 运行所有测试平台
 if {[file exists $sim_build_dir]} {
     file delete -force $sim_build_dir
 }
@@ -83,6 +100,7 @@ foreach tb_name [list regfile_tb alu_tb alu_reg_tb top_tb] {
 
 close_project
 
+# 综合与实现
 if {[file exists $build_dir]} {
     file delete -force $build_dir
 }
@@ -95,6 +113,7 @@ opt_design
 place_design
 route_design
 
+# 生成输出文件
 write_checkpoint -force [file join $build_dir "RegisterFile_Experiment_routed.dcp"]
 write_bitstream -force [file join $build_dir "RegisterFile_Experiment.bit"]
 report_utilization -file [file join $build_dir "utilization.rpt"]

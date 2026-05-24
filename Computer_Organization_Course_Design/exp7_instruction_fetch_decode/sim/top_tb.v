@@ -1,5 +1,16 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// top_tb - 实验7顶层测试平台 (Experiment 7 Top Testbench)
+//==============================================================================
+// 测试内容:
+//   1. 复位后 PC=0, IR=0。
+//   2. 单步执行取指，验证PC递增和IR锁存。
+//   3. 指令字段LED显示验证。
+//   4. 七段数码管显示切换验证。
+//   5. 交通灯输出确认关闭。
+//==============================================================================
+
 module top_tb;
 
     reg clk100mhz;
@@ -36,6 +47,7 @@ module top_tb;
 
     always #5 clk100mhz = ~clk100mhz;
 
+    // 值验证任务
     task expect_equal;
         input [31:0] actual;
         input [31:0] expected;
@@ -50,6 +62,7 @@ module top_tb;
         end
     endtask
 
+    // LED 字段验证任务: 检查指令字段在LED上的映射
     task expect_fields;
         input [31:0] instruction;
         input [255:0] name;
@@ -64,6 +77,7 @@ module top_tb;
         end
     endtask
 
+    // 单步执行任务: BT[0]产生一个高脉冲
     task press_step;
         begin
             @(negedge clk100mhz);
@@ -81,21 +95,25 @@ module top_tb;
         bt = 8'd0;
         errors = 0;
 
+        // 复位: BT[1] 产生负脉冲
         bt[1] = 1'b1;
         repeat (2) @(posedge clk100mhz);
         bt[1] = 1'b0;
-        sw[1:0] = 2'b11;
+        sw[1:0] = 2'b11;  // PC和IR写使能
         repeat (2) @(posedge clk100mhz);
         #1;
 
+        // 复位验证
         expect_equal(dut.pc, 32'h0000_0000, "reset PC");
         expect_equal(dut.ir, 32'h0000_0000, "reset IR");
 
+        // 第一次取指
         press_step();
         expect_equal(dut.ir, 32'h1234_50b7, "first fetched IR");
         expect_equal(dut.pc, 32'h0000_0004, "first PC");
         expect_fields(32'h1234_50b7, "first instruction");
 
+        // 七段数码管显示切换测试
         sw[3:2] = 2'b00;
         #1;
         expect_equal(dut.display_value, 32'h1234_5000, "display imm32");
@@ -109,12 +127,14 @@ module top_tb;
         #1;
         expect_equal(dut.display_value, 32'h0001_0117, "display prefetched instruction");
 
+        // 第二次取指
         sw[3:2] = 2'b00;
         press_step();
         expect_equal(dut.ir, 32'h0001_0117, "second fetched IR");
         expect_equal(dut.pc, 32'h0000_0008, "second PC");
         expect_fields(32'h0001_0117, "second instruction");
 
+        // 交通灯验证
         if (traffic_we_r !== 1'b0 || traffic_we_y !== 1'b0 || traffic_we_g !== 1'b0 ||
             traffic_sn_r !== 1'b0 || traffic_sn_y !== 1'b0 || traffic_sn_g !== 1'b0) begin
             $display("FAIL traffic lights should be off");

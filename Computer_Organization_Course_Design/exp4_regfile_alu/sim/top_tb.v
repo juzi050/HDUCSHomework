@@ -1,5 +1,16 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// top_tb - 实验4顶层测试平台 (Experiment 4 Top Testbench)
+//==============================================================================
+// 测试内容:
+//   1. 按钮操作: 设置读/写地址, 外部写入/ALU写回, 显示模式切换, 复位。
+//   2. 寄存器堆 + ALU 协同工作验证。
+//   3. 溢出标志位验证 (0x7FFFFFFF + 1)。
+//   4. 七段数码管显示验证。
+//   5. 交通灯输出确认关闭。
+//==============================================================================
+
 module top_tb;
 
     reg clk100mhz;
@@ -36,6 +47,7 @@ module top_tb;
 
     always #5 clk100mhz = ~clk100mhz;
 
+    // 按钮按下任务: 模拟按下和释放
     task press_button;
         input integer button;
         begin
@@ -47,6 +59,7 @@ module top_tb;
         end
     endtask
 
+    // 设置读/写地址任务
     task latch_addr;
         input integer button;
         input [4:0] addr;
@@ -56,16 +69,18 @@ module top_tb;
         end
     endtask
 
+    // 加载数据到寄存器任务
     task load_reg;
         input [4:0] addr;
         input [31:0] data;
         begin
-            latch_addr(2, addr);
+            latch_addr(2, addr);     // 设置写地址
             sw[31:0] = data;
-            press_button(3);
+            press_button(3);         // 写入外部数据
         end
     endtask
 
+    // LED 显示验证任务
     task expect_display;
         input [31:0] exp_value;
         input exp_zf;
@@ -88,6 +103,7 @@ module top_tb;
         end
     endtask
 
+    // 单值验证任务
     task expect_output;
         input actual;
         input expected;
@@ -109,25 +125,29 @@ module top_tb;
         errors = 0;
 
         repeat (2) @(posedge clk100mhz);
-        press_button(7);
-        sw[35:32] = 4'b0000;
+        press_button(7);                      // 复位
+        sw[35:32] = 4'b0000;                  // ALU加法
         expect_display(32'h00000000, 1'b1, 1'b0, 1'b0, 1'b0, "reset display result");
 
+        // 加载 R1=3, R2=5
         load_reg(5'd1, 32'h00000003);
         load_reg(5'd2, 32'h00000005);
+        // 选择操作数 A=R1, B=R2
         latch_addr(0, 5'd1);
         latch_addr(1, 5'd2);
         sw[35:32] = 4'b0000;
         #1;
         expect_display(32'h00000008, 1'b0, 1'b0, 1'b0, 1'b0, "top add result");
 
+        // ALU结果写回测试: R3 = R1 + R2 = 8
         latch_addr(2, 5'd3);
-        press_button(4);
+        press_button(4);                      // ALU结果写回
         latch_addr(0, 5'd3);
         latch_addr(1, 5'd0);
         #1;
         expect_display(32'h00000008, 1'b0, 1'b0, 1'b0, 1'b0, "top writeback result");
 
+        // 七段数码管显示验证: 强制扫描位置
         force dut.u_display.scan_div = {3'b000, 14'b0};
         #1;
         if (an !== 8'b1111_1110 || seg !== 7'b0000000 || dp !== 1'b1) begin
@@ -138,6 +158,7 @@ module top_tb;
         end
         release dut.u_display.scan_div;
 
+        // 显示模式切换测试: A -> B -> Result
         press_button(5);
         expect_display(32'h00000008, 1'b0, 1'b0, 1'b0, 1'b0, "display A");
         press_button(5);
@@ -145,6 +166,7 @@ module top_tb;
         press_button(5);
         expect_display(32'h00000008, 1'b0, 1'b0, 1'b0, 1'b0, "display result again");
 
+        // 溢出测试: 0x7FFFFFFF + 1 = 0x80000000
         load_reg(5'd4, 32'h7FFFFFFF);
         load_reg(5'd5, 32'h00000001);
         latch_addr(0, 5'd4);
@@ -153,6 +175,7 @@ module top_tb;
         #1;
         expect_display(32'h80000000, 1'b0, 1'b0, 1'b1, 1'b1, "top overflow flags");
 
+        // 交通灯输出验证
         expect_output(traffic_we_r, 1'b0, "traffic_we_r off");
         expect_output(traffic_we_y, 1'b0, "traffic_we_y off");
         expect_output(traffic_we_g, 1'b0, "traffic_we_g off");

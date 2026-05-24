@@ -1,5 +1,15 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// tb_ALU - ALU 顶层仿真测试平台 (ALU Top-Level Testbench)
+//==============================================================================
+// 测试内容:
+//   1. 按钮操作: 加载A/B, 清除, 显示模式切换。
+//   2. 所有8种ALU运算: AND, OR, XOR, XNOR, ADD, SUB, SLT, SLL。
+//   3. 标志位: ZF(零标志), OF(溢出标志)。
+//   4. 七段数码管段码输出验证。
+//==============================================================================
+
 module tb_ALU;
     localparam MODE_A = 2'b00;
     localparam MODE_B = 2'b01;
@@ -12,7 +22,7 @@ module tb_ALU;
     wire [7:0]  AN;
     wire [7:0]  SEG;
 
-    integer errors;
+    integer errors;  // 错误计数器
 
     ALU dut (
         .CLK100MHZ(clk),
@@ -23,19 +33,22 @@ module tb_ALU;
         .SEG(SEG)
     );
 
+    // 100MHz 时钟生成 (周期 10ns)
     always #5 clk = ~clk;
 
+    // 按钮按下任务: 模拟按下和释放指定按钮
     task press_button;
         input integer button;
         begin
             BT[button] = 1'b1;
-            repeat (4) @(posedge clk);
+            repeat (4) @(posedge clk);  // 保持高电平4个周期
             BT[button] = 1'b0;
-            repeat (4) @(posedge clk);
+            repeat (4) @(posedge clk);  // 等待4个周期稳定
             #1;
         end
     endtask
 
+    // 验证 LED 输出任务: 比较实际值与期望值
     task expect_led;
         input [31:0]  exp_value;
         input [1:0]   exp_mode;
@@ -57,6 +70,7 @@ module tb_ALU;
         end
     endtask
 
+    // ALU 运算测试任务: 设置操作数和操作码，验证结果
     task run_alu_case;
         input [31:0]  in_a;
         input [31:0]  in_b;
@@ -66,20 +80,21 @@ module tb_ALU;
         input         exp_of;
         input [255:0] name;
         begin
-            press_button(2);
+            press_button(2);        // 清除之前的输入
 
             SW[31:0] = in_a;
-            press_button(0);
+            press_button(0);        // 加载A
 
             SW[31:0] = in_b;
-            press_button(1);
+            press_button(1);        // 加载B
 
-            SW[34:32] = op;
+            SW[34:32] = op;         // 设置ALU操作码
             #1;
             expect_led(exp_f, MODE_F, exp_zf, exp_of, name);
         end
     endtask
 
+    // 七段数码管验证任务: 强制设定位选信号，验证段码输出
     task expect_seven_seg;
         input [2:0]   sel;
         input [7:0]   exp_an;
@@ -107,9 +122,11 @@ module tb_ALU;
 
         repeat (2) @(posedge clk);
 
+        // 测试清除功能
         press_button(2);
         expect_led(32'h00000000, MODE_F, 1'b1, 1'b0, "clear initializes F display");
 
+        // 测试加载A/B并验证XOR结果
         SW[31:0] = 32'h12345678;
         press_button(0);
         SW[31:0] = 32'h87654321;
@@ -117,6 +134,7 @@ module tb_ALU;
         SW[34:32] = 3'b010;
         expect_led(32'h95511559, MODE_F, 1'b0, 1'b0, "load A/B and display F");
 
+        // 测试显示模式切换 F->A->B->F
         press_button(3);
         expect_led(32'h12345678, MODE_A, 1'b0, 1'b0, "display A");
         press_button(3);
@@ -124,9 +142,11 @@ module tb_ALU;
         press_button(3);
         expect_led(32'h95511559, MODE_F, 1'b0, 1'b0, "display F again");
 
+        // 测试清除后恢复显示F
         press_button(2);
         expect_led(32'h00000000, MODE_F, 1'b1, 1'b0, "clear restores F display");
 
+        // 测试所有ALU运算
         run_alu_case(32'hFFFF0000, 32'h0F0F0F0F, 3'b000, 32'h0F0F0000, 1'b0, 1'b0, "and");
         run_alu_case(32'h12345678, 32'h87654321, 3'b001, 32'h97755779, 1'b0, 1'b0, "or");
         run_alu_case(32'h12345678, 32'h87654321, 3'b010, 32'h95511559, 1'b0, 1'b0, "xor");
@@ -141,6 +161,7 @@ module tb_ALU;
         run_alu_case(32'h00000004, 32'h00000001, 3'b111, 32'h00000010, 1'b0, 1'b0, "sll normal");
         run_alu_case(32'h00000020, 32'h00000001, 3'b111, 32'h00000000, 1'b1, 1'b0, "sll large shift");
 
+        // 测试七段数码管段码输出 (设定结果为 0x12345678, 验证每个数码管)
         run_alu_case(32'hFFFFFFFF, 32'h12345678, 3'b000, 32'h12345678, 1'b0, 1'b0, "seven segment source");
         expect_seven_seg(3'b000, 8'b11111110, 8'h80, "seven segment digit 0 8");
         expect_seven_seg(3'b001, 8'b11111101, 8'hF8, "seven segment digit 1 7");
@@ -151,6 +172,7 @@ module tb_ALU;
         expect_seven_seg(3'b110, 8'b10111111, 8'hA4, "seven segment digit 6 2");
         expect_seven_seg(3'b111, 8'b01111111, 8'hF9, "seven segment digit 7 1");
 
+        // 测试结果汇总
         if (errors == 0) begin
             $display("ALL TESTS PASSED");
         end else begin

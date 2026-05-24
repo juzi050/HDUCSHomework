@@ -1,8 +1,12 @@
-## HCS-A02 full board constraints for the bundled top-level template.
-## Ports:
-##   clk100mhz, sw[35:0], bt[7:0], ld[35:0]
-##   traffic_we_r/y/g, traffic_sn_r/y/g
-##   an[7:0], seg[6:0], dp
+#==============================================================================
+# HCS_A02.xdc - HCS-A02 开发板完整约束文件
+#==============================================================================
+# 端口:
+#   clk100mhz, sw[35:0], bt[7:0], ld[35:0]
+#   traffic_we_r/y/g, traffic_sn_r/y/g
+#   an[7:0], seg[6:0], dp
+# 时钟约束: 100MHz (周期 10ns)
+# I/O 标准: LVCMOS33
 
 set_property -dict { PACKAGE_PIN E3 IOSTANDARD LVCMOS33 } [get_ports {clk100mhz}]
 create_clock -period 10.000 -name clk100mhz [get_ports {clk100mhz}]

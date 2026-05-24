@@ -1,5 +1,16 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// regfile_tb - 寄存器堆仿真测试平台 (Register File Testbench)
+//==============================================================================
+// 测试内容:
+//   1. 复位后所有寄存器清零。
+//   2. 写入并读出寄存器R5。
+//   3. 写入R0验证硬连线为0。
+//   4. 异步读取测试。
+//   5. 同一地址同时读写测试。
+//==============================================================================
+
 module regfile_tb;
 
     reg clk;
@@ -27,8 +38,10 @@ module regfile_tb;
         .rdata_b(rdata_b)
     );
 
+    // 100MHz 时钟: 周期10ns
     always #5 clk = ~clk;
 
+    // 值验证任务
     task expect_value;
         input [31:0] actual;
         input [31:0] expected;
@@ -53,6 +66,7 @@ module regfile_tb;
         wdata = 32'h00000000;
         errors = 0;
 
+        // 复位测试: 验证所有寄存器清零
         rst = 1'b1;
         repeat (2) @(posedge clk);
         rst = 1'b0;
@@ -64,6 +78,7 @@ module regfile_tb;
             expect_value(rdata_a, 32'h00000000, "reset clears register");
         end
 
+        // 写读测试: 写R5, 验证读出正确
         waddr = 5'd5;
         wdata = 32'hDEADBEEF;
         wen = 1'b1;
@@ -74,6 +89,7 @@ module regfile_tb;
         #1;
         expect_value(rdata_a, 32'hDEADBEEF, "write and read R5");
 
+        // R0硬连线测试: 写入R0应被忽略
         waddr = 5'd0;
         wdata = 32'hFFFFFFFF;
         wen = 1'b1;
@@ -84,12 +100,14 @@ module regfile_tb;
         #1;
         expect_value(rdata_a, 32'h00000000, "R0 ignores writes");
 
+        // 异步双口读取测试: 同时读R0和R5
         raddr_a = 5'd0;
         raddr_b = 5'd5;
         #1;
         expect_value(rdata_a, 32'h00000000, "async read A R0");
         expect_value(rdata_b, 32'hDEADBEEF, "async read B R5");
 
+        // 同地址读写测试: 写R5并同时读R5, 验证时序
         raddr_a = 5'd5;
         waddr = 5'd5;
         wdata = 32'h12345678;

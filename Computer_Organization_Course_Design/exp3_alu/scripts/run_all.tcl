@@ -1,3 +1,14 @@
+#==============================================================================
+# run_all.tcl - 一键仿真+综合+实现脚本 (Experiment 3: ALU)
+#==============================================================================
+# 功能:
+#   - 调用 create_project.tcl 创建项目。
+#   - 运行行为级仿真。
+#   - 执行综合、优化、布局布线。
+#   - 生成比特流 (.bit) 和设计检查点 (.dcp)。
+#   - 输出资源利用率和时序报告。
+#==============================================================================
+
 set script_dir [file dirname [file normalize [info script]]]
 set root_dir [file normalize [file join $script_dir ".."]]
 set project_dir [file join $root_dir "vivado_project"]
@@ -5,11 +16,13 @@ set build_dir [file join $root_dir "build"]
 
 source [file join $script_dir "create_project.tcl"]
 
+# 运行仿真
 launch_simulation
 run all
 close_sim
 close_project
 
+# 综合与实现
 if {[file exists $build_dir]} {
     file delete -force $build_dir
 }
@@ -29,6 +42,7 @@ opt_design
 place_design
 route_design
 
+# 生成输出文件
 write_checkpoint -force [file join $build_dir "ALU_routed.dcp"]
 write_bitstream -force [file join $build_dir "ALU.bit"]
 report_utilization -file [file join $build_dir "utilization.rpt"]

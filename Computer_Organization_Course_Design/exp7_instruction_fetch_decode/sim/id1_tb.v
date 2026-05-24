@@ -1,5 +1,12 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// id1_tb - 指令译码测试平台 (Instruction Decode Testbench)
+//==============================================================================
+// 测试内容: 验证所有RISC-V指令格式的译码字段提取和立即数生成。
+//   指令类型: LUI, AUIPC, ADDI, LW, ADD, SW, BEQ, JAL
+//==============================================================================
+
 module id1_tb;
 
     reg [31:0] instr;
@@ -24,6 +31,7 @@ module id1_tb;
         .imm32(imm32)
     );
 
+    // 值比较验证任务
     task expect_equal;
         input [31:0] actual;
         input [31:0] expected;
@@ -38,6 +46,7 @@ module id1_tb;
         end
     endtask
 
+    // 完整指令检查任务: 验证所有译码字段和立即数
     task check_instr;
         input [31:0] instruction;
         input [31:0] expected_imm;
@@ -59,15 +68,16 @@ module id1_tb;
         instr = 32'h0000_0000;
         errors = 0;
 
-        check_instr(32'h1234_50b7, 32'h1234_5000, "lui");
-        check_instr(32'h0001_0117, 32'h0001_0000, "auipc");
-        check_instr(32'hfff0_0193, 32'hffff_ffff, "addi -1");
-        check_instr(32'h0100_a203, 32'h0000_0010, "lw 16");
-        check_instr(32'h0041_82b3, 32'h0000_0000, "add");
-        check_instr(32'h0050_aa23, 32'h0000_0014, "sw 20");
-        check_instr(32'h0002_8463, 32'h0000_0008, "beq 8");
-        check_instr(32'h0060_0313, 32'h0000_0006, "addi 6");
-        check_instr(32'hff1f_f3ef, 32'hffff_fff0, "jal -16");
+        // 测试各种指令格式的译码
+        check_instr(32'h1234_50b7, 32'h1234_5000, "lui");     // U-type
+        check_instr(32'h0001_0117, 32'h0001_0000, "auipc");   // U-type
+        check_instr(32'hfff0_0193, 32'hffff_ffff, "addi -1"); // I-type (负立即数)
+        check_instr(32'h0100_a203, 32'h0000_0010, "lw 16");   // I-type (load)
+        check_instr(32'h0041_82b3, 32'h0000_0000, "add");     // R-type (无立即数)
+        check_instr(32'h0050_aa23, 32'h0000_0014, "sw 20");   // S-type
+        check_instr(32'h0002_8463, 32'h0000_0008, "beq 8");   // B-type
+        check_instr(32'h0060_0313, 32'h0000_0006, "addi 6");  // I-type
+        check_instr(32'hff1f_f3ef, 32'hffff_fff0, "jal -16"); // J-type (负跳转)
 
         if (errors == 0) begin
             $display("ALL TESTS PASSED: id1_tb");

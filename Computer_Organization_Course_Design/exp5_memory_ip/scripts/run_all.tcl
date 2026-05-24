@@ -1,3 +1,13 @@
+#==============================================================================
+# run_all.tcl - 一键仿真+综合+实现脚本 (Experiment 5: Memory IP)
+#==============================================================================
+# 功能:
+#   - 调用 create_project.tcl 创建项目并生成 BRAM IP。
+#   - 使用 xvlog/xelab/xsim 命令行工具运行仿真 (使用行为级模型)。
+#   - 执行综合、布局布线、比特流生成。
+#   - 输出资源利用率和时序报告。
+#==============================================================================
+
 set script_dir [file dirname [file normalize [info script]]]
 set root_dir [file normalize [file join $script_dir ".."]]
 set project_dir [file join $root_dir "vivado_project"]
@@ -6,6 +16,7 @@ set sim_build_dir [file join $root_dir "sim_build"]
 
 source [file join $script_dir "create_project.tcl"]
 
+# 查找 Vivado 命令行工具
 proc find_tool {tool_base_name} {
     set exe_dir [file normalize [file dirname [info nameofexecutable]]]
     set candidate_dirs [list \
@@ -27,6 +38,7 @@ proc find_tool {tool_base_name} {
     error "Cannot find $tool_base_name near Vivado executable"
 }
 
+# 运行命令行工具
 proc run_cmd {work_dir cmd} {
     set old_dir [pwd]
     cd $work_dir
@@ -44,6 +56,7 @@ proc run_cmd {work_dir cmd} {
     }
 }
 
+# 生成 xsim 项目文件
 proc write_sim_project {prj_file src_files tb_file} {
     set fp [open $prj_file "w"]
     puts $fp "# command-line xsim project"
@@ -55,6 +68,7 @@ proc write_sim_project {prj_file src_files tb_file} {
     close $fp
 }
 
+# 运行单个测试平台
 proc run_testbench {tb_name src_files root_dir sim_build_dir xvlog xelab xsim} {
     puts "Running simulation: $tb_name"
 
@@ -72,10 +86,12 @@ proc run_testbench {tb_name src_files root_dir sim_build_dir xvlog xelab xsim} {
     run_cmd $tb_dir [list cmd /c $xsim $snapshot --R --onerror quit --onfinish quit --log [file join $tb_dir "xsim.log"]]
 }
 
+# 查找工具
 set xvlog [find_tool "xvlog"]
 set xelab [find_tool "xelab"]
 set xsim [find_tool "xsim"]
 
+# 运行所有测试平台 (使用行为级模型代替BRAM IP)
 if {[file exists $sim_build_dir]} {
     file delete -force $sim_build_dir
 }
@@ -86,6 +102,7 @@ foreach tb_name [list RAM_tb top_tb] {
     run_testbench $tb_name $behavioral_src_files $root_dir $sim_build_dir $xvlog $xelab $xsim
 }
 
+# 综合与实现 (使用真实的BRAM IP)
 if {[file exists $build_dir]} {
     file delete -force $build_dir
 }
@@ -95,6 +112,7 @@ reset_run synth_1
 launch_runs impl_1 -to_step write_bitstream -jobs 4
 wait_on_run impl_1
 
+# 复制比特流并生成报告
 open_run impl_1
 set impl_dir [file join $project_dir "${project_name}.runs" "impl_1"]
 set bit_files [glob -nocomplain [file join $impl_dir "*.bit"]]

@@ -1,5 +1,14 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// RAM_B - BRAM行为级仿真模型 (BRAM Behavioral Simulation Model)
+//==============================================================================
+// 功能描述:
+//   - 64x32位内存的纯Verilog行为模型，用于仿真替代BRAM IP核。
+//   - 初始化预设9条测试数据 (地址0-8)，其余清零。
+//   - 上升沿写入/读出。
+//==============================================================================
+
 module RAM_B(
     input  wire        clka,
     input  wire        wea,
@@ -8,14 +17,16 @@ module RAM_B(
     output reg  [31:0] douta
 );
 
-    reg [31:0] memory [0:63];
+    reg [31:0] memory [0:63];  // 64x32位内存
     integer i;
 
     initial begin
+        // 全部清零
         for (i = 0; i < 64; i = i + 1) begin
             memory[i] = 32'h0000_0000;
         end
 
+        // 预设测试数据
         memory[0] = 32'h0000_0820;
         memory[1] = 32'h0063_2020;
         memory[2] = 32'h0001_0FFF;
@@ -29,11 +40,12 @@ module RAM_B(
         douta = 32'h0000_0000;
     end
 
+    // 时钟上升沿: wea=1时写入，wea=0时读出
     always @(posedge clka) begin
         if (wea) begin
-            memory[addra] <= dina;
+            memory[addra] <= dina;   // 写入
         end else begin
-            douta <= memory[addra];
+            douta <= memory[addra];  // 读出
         end
     end
 

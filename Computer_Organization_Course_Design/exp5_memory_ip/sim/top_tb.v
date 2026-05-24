@@ -1,5 +1,16 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// top_tb - 实验5顶层测试平台 (Experiment 5 Top Testbench)
+//==============================================================================
+// 测试内容:
+//   1. 初始状态验证 (地址0读出)。
+//   2. 长按BT[0]写入验证。
+//   3. LED状态显示验证。
+//   4. 七段数码管显示验证。
+//   5. 交通灯输出确认关闭。
+//==============================================================================
+
 module top_tb;
 
     reg clk100mhz;
@@ -36,6 +47,7 @@ module top_tb;
 
     always #5 clk100mhz = ~clk100mhz;
 
+    // LED 显示验证任务
     task expect_leds;
         input [7:0] expected_byte;
         input [5:0] expected_addr;
@@ -55,6 +67,7 @@ module top_tb;
         end
     endtask
 
+    // 单值验证任务
     task expect_output;
         input actual;
         input expected;
@@ -76,26 +89,30 @@ module top_tb;
         errors = 0;
 
         repeat (2) @(posedge clk100mhz);
+        // 初始状态: 地址0, MUX=0
         sw[7:2] = 6'd0;
         sw[1:0] = 2'b00;
         @(posedge clk100mhz);
         expect_leds(8'h20, 6'd0, 2'b00, "initial address 0 byte 0");
 
+        // 切换MUX查看不同字节
         sw[1:0] = 2'b01;
         expect_leds(8'h08, 6'd0, 2'b01, "initial address 0 byte 1");
 
+        // 长按BT[0]写入: 地址63, MUX=0 -> 写入0x0000000F
         sw[7:2] = 6'd63;
         sw[1:0] = 2'b00;
         bt[0] = 1'b1;
         @(posedge clk100mhz);
         @(posedge clk100mhz);
-        sw[1:0] = 2'b11;
+        sw[1:0] = 2'b11;         // 切换MUX查看写入状态
         repeat (3) @(posedge clk100mhz);
         bt[0] = 1'b0;
         sw[1:0] = 2'b00;
         @(posedge clk100mhz);
         #1;
 
+        // 验证写入结果
         if (dut.read_word !== 32'h0000_000F) begin
             $display("FAIL long press single write read_word=%h expected=0000000f", dut.read_word);
             errors = errors + 1;
@@ -104,6 +121,7 @@ module top_tb;
         end
         expect_leds(8'h0F, 6'd63, 2'b00, "long press led status");
 
+        // 七段数码管显示验证: 读出值的最低位应为F (段码 7'b0001110)
         force dut.u_display.scan_div = {3'b000, 14'b0};
         #1;
         if (an !== 8'b1111_1110 || seg !== 7'b0001110 || dp !== 1'b1) begin
@@ -114,6 +132,7 @@ module top_tb;
         end
         release dut.u_display.scan_div;
 
+        // 交通灯输出验证
         expect_output(traffic_we_r, 1'b0, "traffic_we_r off");
         expect_output(traffic_we_y, 1'b0, "traffic_we_y off");
         expect_output(traffic_we_g, 1'b0, "traffic_we_g off");

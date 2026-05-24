@@ -1,5 +1,15 @@
 `timescale 1ns / 1ps
 
+//==============================================================================
+// alu_reg_tb - ALU+寄存器堆组合模块测试平台 (ALU+RegFile Testbench)
+//==============================================================================
+// 测试内容:
+//   1. 复位后ALU结果为0。
+//   2. 外部数据写入寄存器，验证读出。
+//   3. ALU运算结果写回寄存器，验证写入正确。
+//   4. R0硬连线验证 (通过组合模块)。
+//==============================================================================
+
 module alu_reg_tb;
 
     reg clk;
@@ -42,6 +52,7 @@ module alu_reg_tb;
 
     always #5 clk = ~clk;
 
+    // 值验证任务
     task expect_value;
         input [31:0] actual;
         input [31:0] expected;
@@ -56,13 +67,14 @@ module alu_reg_tb;
         end
     endtask
 
+    // 外部数据写入任务
     task write_external;
         input [4:0] addr;
         input [31:0] data;
         begin
             waddr = addr;
             wdata_ext = data;
-            write_from_alu = 1'b0;
+            write_from_alu = 1'b0;      // 选择外部数据
             wen = 1'b1;
             @(posedge clk);
             #1;
@@ -70,11 +82,12 @@ module alu_reg_tb;
         end
     endtask
 
+    // ALU结果写回任务
     task write_result;
         input [4:0] addr;
         begin
             waddr = addr;
-            write_from_alu = 1'b1;
+            write_from_alu = 1'b1;      // 选择ALU结果
             wen = 1'b1;
             @(posedge clk);
             #1;
@@ -92,18 +105,21 @@ module alu_reg_tb;
         raddr_b = 5'd0;
         waddr = 5'd0;
         wdata_ext = 32'h00000000;
-        alu_op = 4'b0000;
+        alu_op = 4'b0000;              // 默认加法
         errors = 0;
 
+        // 复位测试
         rst = 1'b1;
         repeat (2) @(posedge clk);
         rst = 1'b0;
         #1;
         expect_value(result, 32'h00000000, "reset result");
 
+        // 外部数据写入 R1=10, R2=7
         write_external(5'd1, 32'h0000000A);
         write_external(5'd2, 32'h00000007);
 
+        // ALU 加法测试: R1 + R2 = 17
         raddr_a = 5'd1;
         raddr_b = 5'd2;
         alu_op = 4'b0000;
@@ -112,6 +128,7 @@ module alu_reg_tb;
         expect_value(rdata_b, 32'h00000007, "read operand B");
         expect_value(result, 32'h00000011, "add before writeback");
 
+        // ALU结果写回R3并验证
         write_result(5'd3);
         raddr_a = 5'd3;
         raddr_b = 5'd0;
@@ -119,6 +136,7 @@ module alu_reg_tb;
         expect_value(rdata_a, 32'h00000011, "read ALU writeback R3");
         expect_value(result, 32'h00000011, "R3 plus R0");
 
+        // ALU 减法测试: R1 - R2 = 3, 写回R4
         raddr_a = 5'd1;
         raddr_b = 5'd2;
         alu_op = 4'b0001;
@@ -130,6 +148,7 @@ module alu_reg_tb;
         #1;
         expect_value(rdata_a, 32'h00000003, "read ALU writeback R4");
 
+        // R0硬连线测试: 外部写入R0应无效
         write_external(5'd0, 32'hFFFFFFFF);
         raddr_a = 5'd0;
         #1;
