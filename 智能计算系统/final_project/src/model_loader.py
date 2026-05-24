@@ -5,7 +5,6 @@ falling back to fp16 with SDPA attention. Global cache avoids reloading.
 """
 
 import os
-import sys
 import torch
 from transformers import AutoModelForCausalLM, AutoTokenizer
 
@@ -31,15 +30,11 @@ def load_model_and_tokenizer():
     model_path = os.path.abspath(model_path)
 
     if not os.path.exists(model_path):
-        print("[ERROR] Model directory not found: {}".format(model_path),
-              file=sys.stderr)
         raise FileNotFoundError(
             "Model directory not found: {}. "
             "Please download Qwen2.5-1.5B-Instruct into the model/ folder.".format(
                 model_path)
         )
-
-    print("[INFO] Loading tokenizer from {}".format(model_path), file=sys.stderr)
 
     # Load tokenizer
     _tokenizer = AutoTokenizer.from_pretrained(
@@ -64,15 +59,12 @@ def load_model_and_tokenizer():
     try:
         from transformers import BitsAndBytesConfig
         quantization_config = BitsAndBytesConfig(load_in_8bit=True)
-        print("[INFO] Loading model (int8 + SDPA)...", file=sys.stderr)
         _model = AutoModelForCausalLM.from_pretrained(
             model_path,
             quantization_config=quantization_config,
             **common_kwargs,
         )
-    except (ImportError, RuntimeError) as e:
-        print("[INFO] bitsandbytes int8 unavailable ({}), falling back to fp16 + SDPA".format(
-            type(e).__name__), file=sys.stderr)
+    except (ImportError, RuntimeError):
         _model = AutoModelForCausalLM.from_pretrained(
             model_path,
             dtype=torch.float16,
