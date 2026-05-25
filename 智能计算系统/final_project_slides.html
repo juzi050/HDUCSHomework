@@ -1,0 +1,645 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>智能计算系统大作业 — 设计思路与亮点</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@300;400;500;700;900&family=JetBrains+Mono:wght@400;600&display=swap');
+
+  *, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --bg: #f6f8fb;
+    --surface: rgba(255, 255, 255, 0.92);
+    --surface2: #d8e2ef;
+    --primary: #0284c7;
+    --primary2: #4f46e5;
+    --accent: #be185d;
+    --accent2: #ea580c;
+    --green: #15803d;
+    --yellow: #ca8a04;
+    --text: #0f172a;
+    --text2: #475569;
+    --radius: 8px;
+    --shadow: 0 18px 45px rgba(15, 23, 42, 0.08);
+  }
+
+  body {
+    font-family: 'Noto Sans SC', system-ui, sans-serif;
+    background:
+      radial-gradient(circle at 15% 16%, rgba(14, 165, 233, 0.18), transparent 28%),
+      radial-gradient(circle at 82% 14%, rgba(234, 88, 12, 0.13), transparent 30%),
+      linear-gradient(135deg, #fbfdff 0%, #eef4ff 45%, #fff7ed 100%);
+    color: var(--text);
+    height: 100vh; overflow: hidden;
+    display: flex; align-items: center; justify-content: center;
+  }
+
+  /* ── Slide container ── */
+  #app {
+    width: 100vw; height: 100vh;
+    position: relative;
+    overflow: hidden;
+  }
+  #app::before {
+    content: "";
+    position: absolute; inset: 0;
+    background-image:
+      linear-gradient(rgba(15, 23, 42, 0.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(15, 23, 42, 0.045) 1px, transparent 1px);
+    background-size: 42px 42px;
+    mask-image: linear-gradient(to bottom, rgba(0,0,0,0.28), transparent 70%);
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  .slide {
+    position: absolute; inset: 0;
+    display: flex; flex-direction: column; align-items: center; justify-content: center;
+    padding: 60px 80px;
+    opacity: 0; transform: translateY(30px) scale(0.97);
+    transition: opacity 0.55s cubic-bezier(0.22,0.61,0.36,1),
+                transform 0.55s cubic-bezier(0.22,0.61,0.36,1);
+    pointer-events: none;
+    z-index: 1;
+  }
+  .slide.active {
+    opacity: 1; transform: translateY(0) scale(1);
+    pointer-events: auto;
+  }
+  .slide.prev { opacity: 0; transform: translateY(-30px) scale(0.97); }
+
+  /* ── Typography ── */
+  h1 { font-size: 3rem; font-weight: 900; text-align: center; line-height: 1.3; }
+  h2 { font-size: 2.2rem; font-weight: 700; margin-bottom: 32px; display: flex; align-items: center; gap: 12px; }
+  h2 .num { font-size: 1rem; background: linear-gradient(135deg, var(--primary), var(--primary2)); color: #fff; padding: 4px 12px; border-radius: 20px; font-weight: 700; white-space: nowrap; box-shadow: 0 8px 18px rgba(2, 132, 199, 0.24); }
+  h3 { font-size: 1.3rem; font-weight: 700; margin: 18px 0 10px; color: var(--primary); }
+  p, li { font-size: 1.05rem; line-height: 1.7; color: var(--text2); }
+  strong { color: var(--text); }
+  .subtitle { font-size: 1.3rem; color: var(--primary); margin-top: 12px; font-weight: 400; }
+
+  /* ── Cards & grids ── */
+  .card-grid { display: grid; gap: 18px; width: 100%; }
+  .card-grid.col2 { grid-template-columns: 1fr 1fr; }
+  .card-grid.col3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid.col4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .card {
+    background: var(--surface); border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: var(--radius); padding: 22px 26px;
+    box-shadow: var(--shadow);
+    transition: border-color 0.3s, transform 0.3s, box-shadow 0.3s;
+  }
+  .card:hover { border-color: rgba(2, 132, 199, 0.55); transform: translateY(-2px); box-shadow: 0 24px 58px rgba(15, 23, 42, 0.12); }
+  .card .icon { font-size: 2rem; margin-bottom: 8px; }
+  .card h4 { font-size: 1.1rem; font-weight: 700; margin-bottom: 6px; }
+  .card p { font-size: 0.92rem; }
+
+  .highlight-box {
+    background: linear-gradient(135deg, rgba(14,165,233,0.12), rgba(234,88,12,0.08));
+    border-left: 4px solid var(--primary); border-radius: 0 var(--radius) var(--radius) 0;
+    box-shadow: 0 14px 34px rgba(15, 23, 42, 0.06);
+    padding: 16px 22px; margin: 10px 0; font-size: 1rem; color: var(--text);
+  }
+
+  /* ── Architecture diagram ── */
+  .arch-flow {
+    display: flex; flex-direction: column; align-items: center; gap: 6px;
+    width: 100%; max-width: 700px;
+  }
+  .arch-box {
+    background: var(--surface); border: 2px solid rgba(148, 163, 184, 0.38); border-radius: var(--radius);
+    padding: 12px 28px; font-weight: 600; font-size: 1rem; text-align: center;
+    box-shadow: 0 12px 30px rgba(15, 23, 42, 0.07);
+    transition: border-color 0.3s, box-shadow 0.3s;
+  }
+  .arch-box:hover { border-color: var(--primary); box-shadow: 0 18px 42px rgba(2,132,199,0.16); }
+  .arch-box.main { border-color: var(--accent); font-size: 1.1rem; }
+  .arch-arrow { color: var(--primary2); font-size: 1.4rem; }
+  .arch-sub {
+    display: flex; gap: 12px; flex-wrap: wrap; justify-content: center;
+    width: 100%;
+  }
+  .arch-sub .arch-box { font-size: 0.85rem; padding: 10px 16px; font-weight: 400; }
+
+  /* ── Signal flow ── */
+  .signal-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
+  .signal-badge {
+    background: linear-gradient(135deg, var(--primary2), var(--primary)); color: #fff; padding: 4px 14px;
+    border-radius: 20px; font-size: 0.85rem; font-weight: 700; white-space: nowrap;
+  }
+  .signal-desc { font-size: 0.95rem; color: var(--text2); }
+
+  /* ── Table ── */
+  table { width: 100%; border-collapse: collapse; margin-top: 12px; font-size: 0.95rem; background: var(--surface); border-radius: var(--radius); overflow: hidden; box-shadow: var(--shadow); }
+  th { background: #eaf3ff; color: var(--primary2); padding: 10px 16px; text-align: left; font-weight: 600; }
+  td { padding: 10px 16px; border-bottom: 1px solid rgba(148, 163, 184, 0.25); color: var(--text2); }
+  tr:hover td { background: rgba(14,165,233,0.07); }
+
+  /* ── Data samples ── */
+  .data-samples { display: grid; grid-template-columns: 1fr 1fr; gap: 18px; margin-top: 20px; }
+  .data-card { padding: 18px; }
+  .data-card h4 { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+  .data-card pre {
+    background: #f8fafc; border: 1px solid rgba(148, 163, 184, 0.28);
+    border-radius: var(--radius); padding: 12px 14px; max-height: 220px; overflow: hidden;
+    font-family: 'JetBrains Mono', monospace; font-size: 0.76rem; line-height: 1.55;
+    color: #1e293b; white-space: pre-wrap; word-break: break-word;
+  }
+  .flow-note { display: flex; align-items: center; gap: 10px; color: var(--text2); font-size: 0.95rem; }
+  .flow-note strong { color: var(--primary2); }
+
+  /* ── Tags ── */
+  .tag { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 0.8rem; font-weight: 600; margin: 2px 4px; border: 1px solid transparent; }
+  .tag.blue { background: rgba(14,165,233,0.12); color: #0369a1; border-color: rgba(14,165,233,0.2); }
+  .tag.pink { background: rgba(219,39,119,0.12); color: var(--accent); border-color: rgba(219,39,119,0.2); }
+  .tag.green { background: rgba(22,163,74,0.12); color: var(--green); border-color: rgba(22,163,74,0.2); }
+  .tag.orange { background: rgba(234,88,12,0.12); color: var(--accent2); border-color: rgba(234,88,12,0.2); }
+
+  /* ── Step list ── */
+  .step-list { list-style: none; counter-reset: step; }
+  .step-list li { counter-increment: step; padding: 10px 0 10px 44px; position: relative; font-size: 0.95rem; color: var(--text2); }
+  .step-list li::before {
+    content: counter(step);
+    position: absolute; left: 0; top: 10px;
+    width: 28px; height: 28px; line-height: 28px; text-align: center;
+    background: #e0f2fe; color: var(--primary); border-radius: 50%;
+    font-weight: 700; font-size: 0.85rem;
+  }
+
+  /* ── Navigation bar ── */
+  .nav-bar {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    display: flex; align-items: center; gap: 8px; z-index: 100;
+    background: rgba(255, 255, 255, 0.78);
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    border-radius: 999px;
+    padding: 8px 12px;
+    box-shadow: 0 18px 45px rgba(15, 23, 42, 0.12);
+    backdrop-filter: blur(14px);
+  }
+  .nav-btn {
+    width: 44px; height: 44px; border: 2px solid var(--surface2); border-radius: 50%;
+    background: var(--surface); color: var(--text); font-size: 1.3rem; cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: all 0.25s;
+  }
+  .nav-btn:hover { border-color: var(--primary); color: var(--primary); background: #f0f9ff; }
+  .nav-btn:active { transform: scale(0.92); }
+  .page-indicator { font-size: 0.9rem; color: var(--text2); min-width: 80px; text-align: center; user-select: none; }
+
+  /* ── Progress bar ── */
+  .progress {
+    position: fixed; top: 0; left: 0; height: 4px;
+    background: linear-gradient(90deg, var(--primary), var(--primary2), var(--accent));
+    box-shadow: 0 0 16px rgba(2, 132, 199, 0.25);
+    transition: width 0.5s cubic-bezier(0.22,0.61,0.36,1); z-index: 200;
+  }
+
+  /* ── Particle BG ── */
+  .particles {
+    position: fixed; inset: 0; pointer-events: none; z-index: 0;
+  }
+  .particle {
+    position: absolute; border-radius: 50%;
+    background: var(--primary); opacity: 0;
+    box-shadow: 0 0 18px rgba(2, 132, 199, 0.18);
+    animation: floatUp linear infinite;
+  }
+  @keyframes floatUp {
+    0% { opacity: 0; transform: translateY(100vh) scale(0); }
+    10% { opacity: 0.22; }
+    90% { opacity: 0.08; }
+    100% { opacity: 0; transform: translateY(-10vh) scale(1.5); }
+  }
+
+  /* ── Responsive ── */
+  @media (max-width: 900px) {
+    .card-grid.col2, .card-grid.col3, .card-grid.col4 { grid-template-columns: 1fr; }
+    .data-samples { grid-template-columns: 1fr; }
+    .slide { padding: 40px 24px; }
+    h1 { font-size: 2rem; }
+    h2 { font-size: 1.5rem; }
+  }
+</style>
+</head>
+<body>
+
+<div class="progress" id="progress"></div>
+<div class="particles" id="particles"></div>
+
+<div id="app">
+
+  <!-- ═══════ Slide 1: Title ═══════ -->
+  <div class="slide active" data-index="0">
+    <div style="text-align:center; max-width:800px;">
+      <div style="font-size:1rem;color:var(--primary2);letter-spacing:4px;margin-bottom:16px;">智能计算系统 · 大作业</div>
+      <h1 style="background:linear-gradient(135deg,var(--primary),var(--primary2),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;">
+        本地 RAG 课程问答系统
+      </h1>
+      <p class="subtitle">RAG 设计思路与亮点</p>
+      <div style="margin-top:40px;display:flex;gap:20px;justify-content:center;flex-wrap:wrap;">
+        <span class="tag blue">分层知识库</span>
+        <span class="tag pink">多信号检索</span>
+        <span class="tag green">证据可溯源</span>
+        <span class="tag orange">上下文可控</span>
+      </div>
+      <p style="margin-top:48px;color:var(--text2);font-size:0.9rem;">使用 ← → 方向键翻页 · 共 13 页</p>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 2: 项目概述 ═══════ -->
+  <div class="slide" data-index="1">
+    <h2><span class="num">01</span> 项目概述</h2>
+    <div style="max-width:850px;width:100%;">
+      <p style="font-size:1.15rem;margin-bottom:28px;">
+        一个<strong>围绕 RAG（检索增强生成）管线构建的课程问答系统</strong>。核心不是展示大模型本身，而是把课程资料整理成<strong>可检索、可排序、可溯源、可注入 Prompt</strong>的知识上下文，让答案尽量来自课程材料。
+      </p>
+      <div class="card-grid col4" style="margin-top:32px;">
+        <div class="card" style="text-align:center;">
+          <div class="icon">📚</div><h4>知识库分层</h4><p>课程笔记高权重，教材全文负责补充覆盖</p>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div class="icon">🎯</div><h4>检索精准</h4><p>多重信号融合的词汇级检索</p>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div class="icon">🧭</div><h4>上下文可控</h4><p>Top 片段去重、限量、压缩后注入</p>
+        </div>
+        <div class="card" style="text-align:center;">
+          <div class="icon">🔎</div><h4>资料可溯源</h4><p>txt/jsonl 均保留来源、章节与页码线索</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 3: RAG 链路 ═══════ -->
+  <div class="slide" data-index="2">
+    <h2><span class="num">02</span> RAG 链路 — 从问题到答案</h2>
+    <div class="arch-flow">
+      <div class="arch-box main">用户提出课程问题</div>
+      <div class="arch-arrow">▼</div>
+      <div class="arch-box" style="border-color:var(--primary);">解析问题关键词、短语和主题倾向</div>
+      <div class="arch-arrow">▼</div>
+      <div class="arch-sub">
+        <div class="arch-box">召回候选片段<br><span style="font-size:0.75rem;color:var(--text2);">txt 课程笔记</span></div>
+        <div class="arch-box">召回候选片段<br><span style="font-size:0.75rem;color:var(--text2);">jsonl 教材摘录</span></div>
+        <div class="arch-box">多信号重排<br><span style="font-size:0.75rem;color:var(--text2);">BM25 · 关键词 · 主题画像</span></div>
+        <div class="arch-box">压缩证据上下文<br><span style="font-size:0.75rem;color:var(--text2);">Top-K · 去重 · 限字数</span></div>
+      </div>
+      <div class="arch-arrow">▼</div>
+      <div class="arch-box main" style="border-color:var(--accent);">带来源的资料片段注入 Prompt</div>
+      <div class="arch-arrow">▼</div>
+      <div class="arch-box main">输出基于课程资料的答案</div>
+    </div>
+    <p style="margin-top:20px;text-align:center;max-width:760px;">这一页只讲 RAG 主链路：<strong>先从知识库找证据，再把最相关、最干净、可溯源的证据交给回答阶段</strong>。重点不是程序模块，而是资料如何被召回、排序、压缩和使用。</p>
+  </div>
+
+  <!-- ═══════ Slide 4: RAG 检索流程 ═══════ -->
+  <div class="slide" data-index="3">
+    <h2><span class="num">03</span> RAG 引擎 — 从问题到上下文</h2>
+    <div style="max-width:900px;width:100%;">
+      <p style="font-size:1.08rem;margin-bottom:22px;">
+        这部分的重点是：不用向量库，也能把课程材料整理成<strong>可检索、可排序、可塞进 Prompt 的上下文</strong>。rag_engine 负责把原始资料变成 chunk，再根据问题挑出最相关的片段。
+      </p>
+      <div class="card-grid col4">
+        <div class="card" style="border-top:3px solid var(--primary);">
+          <h4 style="color:var(--primary);">1. 构建 Chunk</h4>
+          <p>读取 txt/jsonl，记录 source、page、section、text，形成统一文档片段。</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--green);">
+          <h4 style="color:var(--green);">2. 解析问题</h4>
+          <p>抽取中文 token、短语、领域关键词，并判断可能属于哪个课程主题。</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--accent2);">
+          <h4 style="color:var(--accent2);">3. 融合打分</h4>
+          <p>BM25 分数作为主体，再叠加关键词、主题画像和来源权重。</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--accent);">
+          <h4 style="color:var(--accent);">4. 组装上下文</h4>
+          <p>去重、限制每源数量、控制总字数，只把 Top 片段交给 Prompt。</p>
+        </div>
+      </div>
+      <div class="highlight-box" style="margin-top:20px;">
+        <div class="flow-note"><strong>问题</strong><span>→</span><span>词汇检索</span><span>→</span><span>主题加权</span><span>→</span><span>片段去重</span><span>→</span><strong>带来源的 RAG 上下文</strong></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 5: RAG 知识库样例 ═══════ -->
+  <div class="slide" data-index="4">
+    <h2><span class="num">04</span> RAG 引擎 — 知识库数据样例</h2>
+    <div style="max-width:920px;width:100%;">
+      <p style="margin-bottom:18px;">知识库分成两层：<strong>txt 课程笔记负责高密度知识点</strong>，<strong>jsonl 教材片段负责覆盖面和页码溯源</strong>。检索时两类数据会被统一成 chunk 参与排序。</p>
+      <table>
+        <tr><th>格式</th><th>内容</th><th>分块策略</th></tr>
+        <tr><td><span class="tag green">.txt</span></td><td>课程笔记 (4 个主题文件)</td><td>按【】/=== 标题分割 section → 段落分块 ≤800 字符</td></tr>
+        <tr><td><span class="tag blue">.jsonl</span></td><td>教材全文摘录 (493 条)</td><td>逐行解析 JSON，保留页码、章节元信息</td></tr>
+      </table>
+      <div class="data-samples">
+        <div class="card data-card">
+          <h4><span>.txt 课程笔记片段</span><span class="tag green">高权重</span></h4>
+          <pre><code>【风格迁移】
+内容图像用于约束生成图像的主体结构，风格图像用于提供纹理、色彩和笔触特征。
+内容损失一般取 VGG19 高层特征的均方误差，强调语义结构一致。
+风格损失使用 Gram 矩阵表示特征通道之间的相关性，适合描述纹理统计。
+
+【RNN / LSTM / GRU】
+RNN 通过隐藏状态传递历史信息，但长序列训练中容易出现梯度消失。
+LSTM 引入输入门、遗忘门和输出门，GRU 用更新门和重置门简化结构。</code></pre>
+        </div>
+        <div class="card data-card">
+          <h4><span>.jsonl 教材片段</span><span class="tag blue">可溯源</span></h4>
+          <pre><code>{"source":"book_chunks.jsonl","page":132,"chapter":"循环神经网络","text":"循环神经网络将上一时刻的隐藏状态作为当前计算的一部分，因此适合处理序列数据。"}
+{"source":"book_chunks.jsonl","page":214,"chapter":"深度学习框架","text":"动态图在执行时构建计算图，调试方便；静态图先声明计算过程，便于整体优化和部署。"}
+{"source":"book_chunks.jsonl","page":287,"chapter":"处理器架构","text":"脉动阵列通过规则的数据流和局部通信提高矩阵乘法吞吐，常用于深度学习加速器。"}</code></pre>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 6: 多重信号融合 (1) ═══════ -->
+  <div class="slide" data-index="5">
+    <h2><span class="num">05</span> 检索评分 — 五重信号融合</h2>
+    <div style="max-width:850px;width:100%;">
+      <div class="card-grid col2">
+        <div class="card" style="border-top:3px solid var(--primary);">
+          <h4 style="color:var(--primary);">信号一：BM25 Token 级</h4>
+          <p style="font-size:0.9rem;">中文 unigram+bigram · BM25(k1=1.4,b=0.75) · 高频词额外加权</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--primary2);">
+          <h4 style="color:var(--primary2);">信号二：领域关键词</h4>
+          <p style="font-size:0.9rem;">150+ DOMAIN_KEYWORDS · 匹配加成 +4.0</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--accent);">
+          <h4 style="color:var(--accent);">信号三：中文短语</h4>
+          <p style="font-size:0.9rem;">4-8 字连续子串 · 捕获 BM25 遗漏的组合语义</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--accent2);">
+          <h4 style="color:var(--accent2);">信号四：主题画像</h4>
+          <p style="font-size:0.9rem;">6 大主题检测 · 来源/文档词双重匹配加成</p>
+        </div>
+      </div>
+      <div class="highlight-box" style="margin-top:16px;text-align:center;">
+        <strong>信号五：来源权重</strong> &nbsp;
+        style_transfer / rnn (1.8×) &nbsp;|&nbsp; dl_fundamentals (1.3×) &nbsp;|&nbsp; advanced_topics (1.15×) &nbsp;|&nbsp; textbook (1.0×)
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 7: 主题画像详解 ═══════ -->
+  <div class="slide" data-index="6">
+    <h2><span class="num">06</span> 检索增强 — 主题画像与结果构建</h2>
+    <div style="max-width:850px;width:100%;">
+      <div class="card-grid col3" style="margin-bottom:20px;">
+        <div class="card"><h4>🎨 Style Transfer</h4><p>VGG19 · Gram 矩阵 · 内容/风格损失</p></div>
+        <div class="card"><h4>🔄 RNN / LSTM / GRU</h4><p>CharRNN · 隐状态 · 困惑度</p></div>
+        <div class="card"><h4>🧠 Transformer</h4><p>自注意力 · 多头注意力 · Seq2Seq</p></div>
+        <div class="card"><h4>⚙️ 处理器架构</h4><p>DLP · 脉动阵列 · Roofline · SIMT</p></div>
+        <div class="card"><h4>🔧 调试与调优</h4><p>梯度检查 · 混合精度 · 算子融合</p></div>
+        <div class="card"><h4>🏗️ 编程框架</h4><p>动态/静态图 · 算子注册 · 分布式训练</p></div>
+      </div>
+      <div class="highlight-box">
+        <strong>结果构建策略：</strong>三元组去重 (source, page, text[:80]) · txt 每源≤2条 · JSONL 每源≤1条 · 总量 2000 字符上限 · Top-3 返回
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 8: RAG 上下文注入 ═══════ -->
+  <div class="slide" data-index="7">
+    <h2><span class="num">07</span> RAG 上下文注入 — 证据如何进入 Prompt</h2>
+    <div style="max-width:850px;width:100%;">
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div class="card" style="border-left:4px solid var(--primary);">
+          <h4>证据格式统一</h4>
+          <p>每条资料保留 source、page、section 和正文内容，注入时用【资料】前缀区分普通指令与课程材料。</p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--accent2);">
+          <h4>资料优先级约束</h4>
+          <p>显式要求回答优先依据检索资料，避免模型直接凭通用知识扩写，降低课程范围外发挥。</p>
+        </div>
+        <div class="card" style="border-left:4px solid var(--green);">
+          <h4>问题保持原样</h4>
+          <p>用户问题不和资料硬拼接，RAG 上下文单独注入，便于区分“要回答什么”和“依据什么回答”。</p>
+        </div>
+      </div>
+      <p style="margin-top:20px;color:var(--text2);">这一页的重点是 RAG 的“最后一公里”：检索结果不是简单贴到问题后面，而是作为带来源的证据块进入上下文，让回答更贴近课程资料。</p>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 9: RAG 答案约束 ═══════ -->
+  <div class="slide" data-index="8">
+    <h2><span class="num">08</span> RAG 输出 — 让检索结果变成稳定答案</h2>
+    <div style="max-width:850px;width:100%;">
+      <div class="card-grid col2">
+        <div>
+          <div class="card" style="border-top:3px solid var(--primary);">
+            <h4 style="color:var(--primary);text-align:center;">证据驱动回答</h4>
+            <div style="display:flex;flex-wrap:wrap;gap:6px;margin:8px 0;">
+              <span class="tag green">资料优先</span>
+              <span class="tag blue">限定课程范围</span>
+              <span class="tag orange">保留来源线索</span>
+              <span class="tag pink">总结收束</span>
+            </div>
+            <p style="font-size:0.9rem;">回答不是“自由发挥”，而是围绕 Top 片段组织语言：先覆盖检索到的核心概念，再用简短总结收尾。</p>
+          </div>
+        </div>
+        <div>
+          <div class="card" style="border-top:3px solid var(--accent);">
+            <h4 style="color:var(--accent);text-align:center;">RAG 结果清理</h4>
+            <ol class="step-list" style="font-size:0.85rem;">
+              <li>去掉重复资料标题</li>
+              <li>合并相似解释句</li>
+              <li>保留公式与关键术语</li>
+              <li>控制答案篇幅</li>
+              <li>补齐总结句</li>
+              <li>空检索时给出兜底说明</li>
+            </ol>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 10: 知识库设计 ═══════ -->
+  <div class="slide" data-index="9">
+    <h2><span class="num">09</span> 知识库设计 — 分层结构</h2>
+    <div style="max-width:850px;width:100%;">
+      <div class="card-grid col2" style="margin-bottom:28px;">
+        <div class="card" style="text-align:center;border-top:3px solid var(--primary);">
+          <div style="font-size:2.5rem;margin-bottom:8px;">📝</div>
+          <h4>课程笔记层（高权重）</h4>
+          <p style="font-size:0.85rem;">style_transfer.txt · rnn_experiment.txt<br>dl_fundamentals.txt · advanced_topics.txt</p>
+          <p style="font-size:0.85rem;color:var(--green);margin-top:6px;">信息密度高 · 噪声低 · 公式精确</p>
+        </div>
+        <div class="card" style="text-align:center;border-top:3px solid var(--primary2);">
+          <div style="font-size:2.5rem;margin-bottom:8px;">📚</div>
+          <h4>教材全文层（兜底补充）</h4>
+          <p style="font-size:0.85rem;">book_chunks.jsonl (493 条)</p>
+          <p style="font-size:0.85rem;color:var(--accent2);margin-top:6px;">覆盖面广 · 带页码元信息 · 可溯源</p>
+        </div>
+      </div>
+      <div class="highlight-box">
+        <strong>设计哲学：</strong>笔记层信息密度高、噪声低 → 赋予更高权重；教材层覆盖面广但粒度粗 → 兜底补充。主题画像的来源映射利用了这一分层结构（如"风格迁移"优先匹配 style_transfer.txt）。
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 11: RAG 设计亮点 1-4 ═══════ -->
+  <div class="slide" data-index="10">
+    <h2><span class="num">10</span> RAG 设计亮点 (1/2)</h2>
+    <div style="max-width:900px;width:100%;">
+      <div class="card-grid col2">
+        <div class="card" style="border-top:3px solid var(--primary);">
+          <h4 style="color:var(--primary);">✨ 分层知识库</h4>
+          <p>txt 课程笔记作为高置信知识层，jsonl 教材全文作为覆盖层；检索时统一成 chunk，但保留不同来源权重。</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--primary2);">
+          <h4 style="color:var(--primary2);">✨ 轻量词汇级 RAG</h4>
+          <p>不依赖嵌入模型和向量数据库，用 BM25 + 课程关键词完成限定领域检索，部署成本低、逻辑透明。</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--accent);">
+          <h4 style="color:var(--accent);">✨ 多信号融合排序</h4>
+          <p>BM25、领域关键词、中文短语、主题画像、来源权重一起打分，避免只靠单一词频导致结果偏移。</p>
+        </div>
+        <div class="card" style="border-top:3px solid var(--accent2);">
+          <h4 style="color:var(--accent2);">✨ 主题画像增强</h4>
+          <p>把风格迁移、RNN、Transformer、处理器架构等课程主题做成画像，问题命中主题后优先召回对应资料。</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 12: RAG 设计亮点 5-7 ═══════ -->
+  <div class="slide" data-index="11">
+    <h2><span class="num">11</span> RAG 设计亮点 (2/2)</h2>
+    <div style="max-width:900px;width:100%;">
+      <div class="card-grid col3" style="margin-bottom:20px;">
+        <div class="card" style="text-align:center;border-top:3px solid var(--green);">
+          <div class="icon">🧭</div>
+          <h4 style="color:var(--green);">上下文压缩可控</h4>
+          <p>三元组去重 · 每源数量限制 · 总字数上限 · Top-3 片段注入</p>
+        </div>
+        <div class="card" style="text-align:center;border-top:3px solid var(--primary);">
+          <div class="icon">🔎</div>
+          <h4 style="color:var(--primary);">证据可溯源</h4>
+          <p>每个 chunk 保留 source、page、section，回答依据能追回原始课程材料</p>
+        </div>
+        <div class="card" style="text-align:center;border-top:3px solid var(--accent);">
+          <div class="icon">🏗️</div>
+          <h4 style="color:var(--accent);">可替换检索核心</h4>
+          <p>当前是 BM25，后续可替换为向量检索或混合检索，而 Prompt 注入接口保持稳定</p>
+        </div>
+      </div>
+      <div class="highlight-box" style="text-align:center;padding:20px;">
+        <strong>核心洞察：</strong>这份作业的亮点集中在 RAG 工程：<strong>资料怎么组织、怎么召回、怎么压缩、怎么作为证据进入回答</strong>。
+      </div>
+    </div>
+  </div>
+
+  <!-- ═══════ Slide 13: End ═══════ -->
+  <div class="slide" data-index="12">
+    <div style="text-align:center;max-width:700px;">
+      <h1 style="background:linear-gradient(135deg,var(--primary),var(--accent));-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;margin-bottom:16px;">
+        谢谢
+      </h1>
+      <p style="font-size:1.2rem;color:var(--text2);margin-bottom:40px;">本地 RAG 课程问答系统 · RAG 设计思路与亮点</p>
+      <div style="display:flex;gap:20px;justify-content:center;flex-wrap:wrap;">
+        <div class="card" style="text-align:center;min-width:140px;">
+          <div style="font-size:2rem;">📚</div><p style="font-size:0.9rem;">分层知识库</p>
+        </div>
+        <div class="card" style="text-align:center;min-width:140px;">
+          <div style="font-size:2rem;">🔍</div><p style="font-size:0.9rem;">BM25 RAG</p>
+        </div>
+        <div class="card" style="text-align:center;min-width:140px;">
+          <div style="font-size:2rem;">🧭</div><p style="font-size:0.9rem;">上下文压缩</p>
+        </div>
+        <div class="card" style="text-align:center;min-width:140px;">
+          <div style="font-size:2rem;">🔎</div><p style="font-size:0.9rem;">证据可溯源</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- ── Navigation ── -->
+<div class="nav-bar">
+  <button class="nav-btn" id="btnPrev" title="上一页 (←)">◀</button>
+  <span class="page-indicator" id="pageNum">1 / 13</span>
+  <button class="nav-btn" id="btnNext" title="下一页 (→)">▶</button>
+</div>
+
+<script>
+(function(){
+  const slides = document.querySelectorAll('.slide');
+  const total = slides.length;
+  let current = 0;
+
+  function show(idx) {
+    slides.forEach((s, i) => {
+      s.classList.remove('active','prev');
+      if (i === idx) s.classList.add('active');
+      else if (i < idx) s.classList.add('prev');
+    });
+    document.getElementById('pageNum').textContent = (idx+1) + ' / ' + total;
+    document.getElementById('progress').style.width = ((idx+1)/total*100) + '%';
+  }
+
+  function next() { if (current < total-1) { current++; show(current); } }
+  function prev() { if (current > 0) { current--; show(current); } }
+
+  document.getElementById('btnNext').addEventListener('click', next);
+  document.getElementById('btnPrev').addEventListener('click', prev);
+
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown' || e.key === ' ') {
+      e.preventDefault(); next();
+    } else if (e.key === 'ArrowLeft' || e.key === 'ArrowUp') {
+      e.preventDefault(); prev();
+    } else if (e.key === 'Home') { e.preventDefault(); current=0; show(0); }
+    else if (e.key === 'End') { e.preventDefault(); current=total-1; show(total-1); }
+  });
+
+  // Touch support
+  let touchStartX = 0, touchStartY = 0;
+  document.addEventListener('touchstart', e => {
+    touchStartX = e.touches[0].clientX;
+    touchStartY = e.touches[0].clientY;
+  });
+  document.addEventListener('touchend', e => {
+    const dx = e.changedTouches[0].clientX - touchStartX;
+    const dy = e.changedTouches[0].clientY - touchStartY;
+    if (Math.abs(dx) > Math.abs(dy) && Math.abs(dx) > 40) {
+      dx > 0 ? prev() : next();
+    }
+  });
+
+  // Click on slide edge for navigation
+  document.getElementById('app').addEventListener('click', e => {
+    const rect = e.currentTarget.getBoundingClientRect();
+    const x = e.clientX - rect.left;
+    if (x < rect.width * 0.12) prev();
+    else if (x > rect.width * 0.88) next();
+  });
+
+  // ── Background particles ──
+  const particleContainer = document.getElementById('particles');
+  for (let i = 0; i < 30; i++) {
+    const p = document.createElement('div');
+    p.className = 'particle';
+    const size = 2 + Math.random() * 4;
+    p.style.width = size + 'px';
+    p.style.height = size + 'px';
+    p.style.left = Math.random() * 100 + '%';
+    p.style.animationDuration = (8 + Math.random() * 20) + 's';
+    p.style.animationDelay = Math.random() * 15 + 's';
+    particleContainer.appendChild(p);
+  }
+
+  // Initialize
+  show(0);
+})();
+</script>
+
+</body>
+</html>
