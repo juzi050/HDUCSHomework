@@ -27,8 +27,9 @@ def build_prompt(question, rag_context=None, system_prompt=None):
     if rag_context:
         context_text = _format_rag_context(rag_context)
         rag_message = (
-            "【资料】以下片段优先级高于通用知识。回答时直接使用其中相关"
-            "公式、数值和术语；不要复述无关片段，不要编造资料外细节。\n\n"
+            "【资料】以下片段优先级高于通用知识。请基于资料推理归纳，"
+            "提取与问题直接相关的公式、数值和术语组织回答；"
+            "勿复述无关片段或编造细节。务必在末尾给出总结。\n\n"
             "{}".format(context_text)
         )
         messages.append({"role": "system", "content": rag_message})

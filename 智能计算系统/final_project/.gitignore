@@ -5,3 +5,4 @@ __pycache__/
 
 # Model files (too large for git, managed separately)
 model/
+*.zip

@@ -62,10 +62,9 @@ def main():
     # Free input tensors
     del inputs
 
-    # Output answer to stdout (and ONLY the answer)
+    # Output answer to stdout
     if not answer:
-        # Never output an empty answer — the evaluator considers it a failure
-        answer = "抱歉，我暂时无法回答这个问题。"
+        answer = ""
 
     print(answer, end="", flush=True)
 

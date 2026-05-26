@@ -60,8 +60,10 @@ def generate_answer(model, tokenizer, inputs):
 def _postprocess_answer(answer):
     """Normalize generated text, remove repeated sentences, and ensure closure."""
     text = (answer or "").strip()
-    if not text:
-        return "总结：根据现有资料暂时无法形成可靠回答。"
+
+    # Filter out instruction leakage: remove lines that look like system prompt fragments
+    if text:
+        text = _filter_instruction_leakage(text)
 
     text = re.sub(r"[ \t\r\f\v]+", " ", text)
     raw_lines = [line.strip() for line in text.splitlines()]
@@ -93,6 +95,38 @@ def _postprocess_answer(answer):
         text = text.rstrip("。；;，, \n")
         text = "{}\n总结：{}".format(text, summary)
     return text
+
+
+def _filter_instruction_leakage(text):
+    """Remove lines that look like system prompt fragments leaked into output."""
+    leakage_patterns = [
+        r"^\s*回答规则[：:]",
+        r"^\s*课程范围[：:]",
+        r"^\s*格式[：:][\s]*$",
+        r"^\s*禁止[：:]*\s*$",
+        r"^\s*\d+[.、]\s*\d+[-~]\d+\s*汉字",
+        r"^\s*最后一行必须",
+        r"^\s*你是\S{2,6}课程助教",
+    ]
+    lines = text.splitlines()
+    filtered = []
+    for line in lines:
+        stripped = line.strip()
+        if not stripped:
+            if filtered and filtered[-1]:
+                filtered.append("")
+            continue
+        is_leak = False
+        for pattern in leakage_patterns:
+            if re.match(pattern, stripped):
+                is_leak = True
+                break
+        if not is_leak:
+            filtered.append(line)
+    # Clean up trailing lone lines that are likely leakage fragments
+    while filtered and re.match(r"^\s*(课程范围|回答规则|格式要求|禁止)[：:]*\s*$", filtered[-1].strip()):
+        filtered.pop()
+    return "\n".join(filtered).strip()
 
 
 def _has_summary_line(text):
@@ -180,10 +214,14 @@ def _keep_first_summary(text):
 
 def _build_fallback_summary(text):
     lines = [line.strip() for line in text.splitlines() if line.strip()]
+    # Skip title-only lines and instruction fragments
     for line in reversed(lines):
-        line = re.sub(r"^[一二三四五六七八九十\d、.．\s-]+", "", line)
-        line = re.sub(r"^[\u4e00-\u9fffA-Za-z/]{2,8}[:：]", "", line).strip()
-        line = line.rstrip("。；;，, ")
-        if len(line) >= 8 and line != "总结":
-            return line
-    return "根据上文可得出这一题的核心结论。"
+        candidate = re.sub(r"^[一二三四五六七八九十\d、.．\s-]+", "", line)
+        candidate = re.sub(r"^[\u4e00-\u9fffA-Za-z/]{2,8}[:：]", "", candidate).strip()
+        candidate = candidate.rstrip("。；;，, ")
+        # Filter out likely instruction leakage fragments
+        if re.match(r"^(回答规则|课程范围|格式|禁止|最后|你是)", candidate):
+            continue
+        if len(candidate) >= 12 and candidate not in ("总结", "归纳", "结论"):
+            return candidate
+    return ""
