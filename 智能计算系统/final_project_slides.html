@@ -126,6 +126,165 @@
   .chain-slide .arch-box { padding: 10px 24px; }
   .chain-slide .arch-sub .arch-box { padding: 8px 14px; }
 
+  /* ── RAG demo animation ── */
+  .rag-demo {
+    width: 100%;
+    max-width: 980px;
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+  }
+  .rag-topline, .rag-output {
+    display: grid;
+    grid-template-columns: 1fr auto 1fr;
+    align-items: center;
+    gap: 12px;
+  }
+  .rag-kicker {
+    display: block;
+    margin-bottom: 6px;
+    color: var(--primary2);
+    font-size: 0.78rem;
+    font-weight: 700;
+  }
+  .rag-question {
+    display: block;
+    font-size: 1rem;
+    color: var(--text);
+  }
+  .rag-tags {
+    display: flex;
+    justify-content: center;
+    flex-wrap: wrap;
+    gap: 4px;
+  }
+  .rag-side-arrow {
+    width: 32px;
+    text-align: center;
+  }
+  .rag-chain {
+    position: relative;
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 12px;
+    align-items: stretch;
+    padding: 8px 0;
+  }
+  .rag-chain::before {
+    content: "";
+    position: absolute;
+    left: 7%;
+    right: 7%;
+    top: 50%;
+    height: 2px;
+    background: linear-gradient(90deg, rgba(2,132,199,0.2), rgba(79,70,229,0.34), rgba(190,24,93,0.2));
+    transform: translateY(-50%);
+    z-index: -1;
+  }
+  .rag-node {
+    position: relative;
+    min-height: 110px;
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    overflow: hidden;
+  }
+  .rag-node::after {
+    content: "";
+    position: absolute;
+    inset: -2px;
+    border: 2px solid rgba(2, 132, 199, 0.42);
+    border-radius: var(--radius);
+    opacity: 0;
+    pointer-events: none;
+  }
+  .rag-node strong {
+    display: block;
+    margin-bottom: 6px;
+    font-size: 0.98rem;
+  }
+  .rag-node span:not(.tag) {
+    color: var(--text2);
+    font-size: 0.78rem;
+    line-height: 1.5;
+  }
+  .rag-packet-track {
+    position: relative;
+    height: 96px;
+    border: 1px dashed rgba(148, 163, 184, 0.38);
+    border-radius: var(--radius);
+    background: rgba(255, 255, 255, 0.45);
+    overflow: hidden;
+  }
+  .rag-packet {
+    position: absolute;
+    left: 3%;
+    top: 18%;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    padding: 5px 10px;
+    border-radius: 999px;
+    border: 1px solid rgba(148, 163, 184, 0.32);
+    background: var(--surface);
+    box-shadow: 0 10px 24px rgba(15, 23, 42, 0.08);
+    color: var(--text2);
+    font-size: 0.76rem;
+    font-weight: 700;
+    opacity: 0;
+    transform: translateY(-50%);
+    white-space: nowrap;
+  }
+  .rag-packet.keep-note { color: var(--green); border-color: rgba(22,163,74,0.28); }
+  .rag-packet.keep-book { color: var(--primary); border-color: rgba(14,165,233,0.28); top: 82%; }
+  .rag-packet.drop { color: var(--accent2); border-color: rgba(234,88,12,0.28); top: 48%; }
+  .rag-context p, .rag-answer p {
+    font-size: 0.86rem;
+    line-height: 1.55;
+  }
+  .rag-step {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  .rag-demo.rag-running .rag-step {
+    animation: ragReveal 0.55s cubic-bezier(0.22,0.61,0.36,1) forwards;
+    animation-delay: var(--delay, 0s);
+  }
+  .rag-demo.rag-running .rag-node::after {
+    animation: ragNodePulse 0.9s ease-out forwards;
+    animation-delay: var(--pulse, var(--delay, 0s));
+  }
+  .rag-demo.rag-running .rag-packet.keep-note,
+  .rag-demo.rag-running .rag-packet.keep-book {
+    animation: ragPacketKeep 4.6s cubic-bezier(0.22,0.61,0.36,1) forwards;
+    animation-delay: var(--packet-delay, 1.4s);
+  }
+  .rag-demo.rag-running .rag-packet.drop {
+    animation: ragPacketDrop 2.8s cubic-bezier(0.22,0.61,0.36,1) forwards;
+    animation-delay: var(--packet-delay, 1.7s);
+  }
+  @keyframes ragReveal {
+    to { opacity: 1; transform: translateY(0); }
+  }
+  @keyframes ragNodePulse {
+    0% { opacity: 0; transform: scale(0.98); }
+    38% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.04); }
+  }
+  @keyframes ragPacketKeep {
+    0% { left: 3%; opacity: 0; transform: translateY(-50%) scale(0.96); }
+    12% { opacity: 1; }
+    42% { left: 34%; opacity: 1; }
+    72% { left: 58%; opacity: 1; }
+    100% { left: 66%; opacity: 1; transform: translateY(-50%) scale(1); }
+  }
+  @keyframes ragPacketDrop {
+    0% { left: 3%; opacity: 0; transform: translateY(-50%) scale(0.96); }
+    16% { opacity: 1; }
+    58% { left: 35%; opacity: 1; }
+    100% { left: 45%; opacity: 0; transform: translateY(-50%) scale(0.94); }
+  }
+
   /* ── Signal flow ── */
   .signal-row { display: flex; align-items: center; gap: 12px; margin: 8px 0; }
   .signal-badge {
@@ -224,9 +383,30 @@
   @media (max-width: 900px) {
     .card-grid.col2, .card-grid.col3, .card-grid.col4 { grid-template-columns: 1fr; }
     .data-samples, .data-samples.wide-txt { grid-template-columns: 1fr; }
+    .rag-demo { gap: 10px; }
+    .rag-topline, .rag-output, .rag-chain { grid-template-columns: 1fr; }
+    .rag-chain::before { display: none; }
+    .rag-node { min-height: auto; }
+    .rag-side-arrow { width: auto; transform: rotate(90deg); }
+    .rag-packet-track { height: 96px; }
+    .rag-packet { font-size: 0.68rem; padding: 4px 8px; }
     .slide { padding: 32px 24px 110px; }
     h1 { font-size: 2rem; }
     h2 { font-size: 1.5rem; }
+  }
+
+  @media (max-width: 520px) {
+    .chain-slide h2 { margin-bottom: 10px; }
+    .chain-slide .arch-box { padding: 7px 10px; }
+    .rag-demo { gap: 6px; }
+    .rag-topline, .rag-output, .rag-chain { gap: 6px; }
+    .rag-side-arrow { font-size: 1rem; line-height: 1; }
+    .rag-kicker { margin-bottom: 3px; font-size: 0.66rem; }
+    .rag-question, .rag-node strong { font-size: 0.78rem; }
+    .rag-node span:not(.tag), .rag-context p, .rag-answer p { font-size: 0.66rem; line-height: 1.35; }
+    .rag-tags { gap: 2px; }
+    .rag-tags .tag, .rag-context .tag { padding: 1px 6px; font-size: 0.62rem; }
+    .rag-packet-track { display: none; }
   }
 </style>
 </head>
@@ -282,21 +462,61 @@
   <!-- ═══════ Slide 3: RAG 链路 ═══════ -->
   <div class="slide chain-slide" data-index="2">
     <h2><span class="num">02</span> RAG 链路 — 从问题到答案</h2>
-    <div class="arch-flow">
-      <div class="arch-box main">用户提出课程问题</div>
-      <div class="arch-arrow">▼</div>
-      <div class="arch-box" style="border-color:var(--primary);">解析问题关键词、短语和主题倾向</div>
-      <div class="arch-arrow">▼</div>
-      <div class="arch-sub">
-        <div class="arch-box">召回候选片段<br><span style="font-size:0.75rem;color:var(--text2);">txt 课程笔记</span></div>
-        <div class="arch-box">召回候选片段<br><span style="font-size:0.75rem;color:var(--text2);">jsonl 教材摘录</span></div>
-        <div class="arch-box">多信号重排<br><span style="font-size:0.75rem;color:var(--text2);">BM25 · 关键词 · 主题画像</span></div>
-        <div class="arch-box">压缩证据上下文<br><span style="font-size:0.75rem;color:var(--text2);">Top-K · 去重 · 限字数</span></div>
+    <div class="rag-demo" data-rag-demo>
+      <div class="rag-topline">
+        <div class="arch-box main rag-step" style="--delay:0.1s;">
+          <span class="rag-kicker">用户问题</span>
+          <strong class="rag-question">LSTM 为什么能缓解普通 RNN 的梯度消失？</strong>
+        </div>
+        <div class="arch-arrow rag-side-arrow rag-step" style="--delay:0.55s;">→</div>
+        <div class="arch-box rag-step" style="--delay:0.75s;border-color:var(--primary);">
+          <span class="rag-kicker">解析问题</span>
+          <div class="rag-tags">
+            <span class="tag pink">LSTM</span>
+            <span class="tag blue">RNN</span>
+            <span class="tag orange">梯度消失</span>
+            <span class="tag green">门控结构</span>
+          </div>
+        </div>
       </div>
-      <div class="arch-arrow">▼</div>
-      <div class="arch-box main" style="border-color:var(--accent);">带来源的资料片段进入回答上下文</div>
-      <div class="arch-arrow">▼</div>
-      <div class="arch-box main">输出基于课程资料的答案</div>
+
+      <div class="rag-chain">
+        <div class="arch-box rag-node rag-step" style="--delay:1.35s;--pulse:1.55s;border-color:var(--green);">
+          <strong>召回候选片段</strong>
+          <span>txt 课程笔记 + jsonl 教材摘录一起进入候选池</span>
+        </div>
+        <div class="arch-box rag-node rag-step" style="--delay:2.35s;--pulse:2.55s;border-color:var(--primary);">
+          <strong>多信号重排</strong>
+          <span>BM25 · 关键词 · 中文短语 · 主题画像 · 来源权重</span>
+        </div>
+        <div class="arch-box rag-node rag-step" style="--delay:3.45s;--pulse:3.65s;border-color:var(--accent2);">
+          <strong>压缩证据上下文</strong>
+          <span>Top-K · 去重 · 限来源 · 控制总字数</span>
+        </div>
+        <div class="arch-box rag-node rag-step" style="--delay:4.45s;--pulse:4.65s;border-color:var(--accent);">
+          <strong>注入回答上下文</strong>
+          <span>把带 source / page / section 的证据块交给模型</span>
+        </div>
+      </div>
+
+      <div class="rag-packet-track rag-step" style="--delay:1.25s;">
+        <span class="rag-packet keep-note" style="--packet-delay:1.45s;">课程笔记片段 · 命中门控</span>
+        <span class="rag-packet keep-book" style="--packet-delay:1.7s;">教材页码片段 · 补充 RNN 问题</span>
+        <span class="rag-packet drop" style="--packet-delay:1.9s;">泛化训练片段 · 排序后过滤</span>
+      </div>
+
+      <div class="rag-output">
+        <div class="arch-box main rag-context rag-step" style="--delay:5.35s;border-color:var(--accent);">
+          <span class="rag-kicker">整理后的 RAG 证据</span>
+          <p><span class="tag green">资料 1</span> LSTM 的输入门、遗忘门、输出门控制信息保留与更新。</p>
+          <p><span class="tag blue">资料 2</span> 普通 RNN 在长序列训练中容易出现梯度消失。</p>
+        </div>
+        <div class="arch-arrow rag-side-arrow rag-step" style="--delay:5.85s;">→</div>
+        <div class="arch-box main rag-answer rag-step" style="--delay:6.15s;">
+          <span class="rag-kicker">输出答案</span>
+          <p>基于课程证据解释：LSTM 通过门控和记忆单元让长期信息更稳定地传递，因此能缓解普通 RNN 的梯度消失。</p>
+        </div>
+      </div>
     </div>
   </div>
 
@@ -614,8 +834,24 @@ LSTM 引入输入门、遗忘门和输出门，GRU 用更新门和重置门简�
 <script>
 (function(){
   const slides = document.querySelectorAll('.slide');
+  const ragDemo = document.querySelector('[data-rag-demo]');
   const total = slides.length;
   let current = 0;
+  let ragTimer = null;
+
+  function resetRagDemo() {
+    if (!ragDemo) return;
+    window.clearTimeout(ragTimer);
+    ragDemo.classList.remove('rag-running');
+  }
+
+  function playRagDemo() {
+    if (!ragDemo) return;
+    resetRagDemo();
+    ragTimer = window.setTimeout(() => {
+      ragDemo.classList.add('rag-running');
+    }, 80);
+  }
 
   function show(idx) {
     slides.forEach((s, i) => {
@@ -625,6 +861,8 @@ LSTM 引入输入门、遗忘门和输出门，GRU 用更新门和重置门简�
     });
     document.getElementById('pageNum').textContent = (idx+1) + ' / ' + total;
     document.getElementById('progress').style.width = ((idx+1)/total*100) + '%';
+    if (idx === 2) playRagDemo();
+    else resetRagDemo();
   }
 
   function next() { if (current < total-1) { current++; show(current); } }
