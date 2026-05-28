@@ -47,30 +47,51 @@ def load_model_and_tokenizer():
     if _tokenizer.pad_token is None:
         _tokenizer.pad_token = _tokenizer.eos_token
 
-    # Common kwargs for both int8 and fp16 paths
+    use_cuda = torch.cuda.is_available()
+
+    # Common kwargs for both int8 and fallback paths.
     common_kwargs = dict(
-        device_map="auto",
         trust_remote_code=True,
         low_cpu_mem_usage=True,
         attn_implementation="sdpa",  # PyTorch 2.0+ built-in efficient attention
     )
+    if use_cuda:
+        common_kwargs["device_map"] = "auto"
 
-    # Try int8 quantization first for maximum memory savings
-    try:
-        from transformers import BitsAndBytesConfig
-        quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+    dtype = _select_fallback_dtype()
+
+    # Try int8 only on CUDA. On CPU it usually fails first and only adds load time.
+    if use_cuda:
+        try:
+            from transformers import BitsAndBytesConfig
+            quantization_config = BitsAndBytesConfig(load_in_8bit=True)
+            _model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                quantization_config=quantization_config,
+                **common_kwargs,
+            )
+        except (ImportError, RuntimeError, ValueError):
+            _model = AutoModelForCausalLM.from_pretrained(
+                model_path,
+                dtype=dtype,
+                **common_kwargs,
+            )
+    else:
         _model = AutoModelForCausalLM.from_pretrained(
             model_path,
-            quantization_config=quantization_config,
-            **common_kwargs,
-        )
-    except (ImportError, RuntimeError):
-        _model = AutoModelForCausalLM.from_pretrained(
-            model_path,
-            dtype=torch.float16,
+            dtype=dtype,
             **common_kwargs,
         )
 
     _model.eval()
 
     return _model, _tokenizer
+
+
+def _select_fallback_dtype():
+    """Use the model config dtype on GPU, and fp32 on CPU for compatibility."""
+    if not torch.cuda.is_available():
+        return torch.float32
+    if torch.cuda.is_bf16_supported():
+        return torch.bfloat16
+    return torch.float16

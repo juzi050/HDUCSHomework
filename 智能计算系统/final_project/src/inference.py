@@ -1,7 +1,6 @@
 """Generate answer using greedy decoding for deterministic, fast output."""
 
 import re
-from difflib import SequenceMatcher
 
 import torch
 
@@ -12,7 +11,6 @@ from .config import (
     TOP_K,
     DO_SAMPLE,
     REPETITION_PENALTY,
-    NO_REPEAT_NGRAM_SIZE,
 )
 
 
@@ -32,7 +30,6 @@ def generate_answer(model, tokenizer, inputs):
             "max_new_tokens": MAX_NEW_TOKENS,
             "do_sample": DO_SAMPLE,
             "repetition_penalty": REPETITION_PENALTY,
-            "no_repeat_ngram_size": NO_REPEAT_NGRAM_SIZE,
             "pad_token_id": tokenizer.pad_token_id,
             "eos_token_id": tokenizer.eos_token_id,
         }
@@ -58,7 +55,7 @@ def generate_answer(model, tokenizer, inputs):
 
 
 def _postprocess_answer(answer):
-    """Normalize generated text, remove repeated sentences, and ensure closure."""
+    """Normalize generated text and remove exact repeats."""
     text = (answer or "").strip()
 
     # Filter out instruction leakage: remove lines that look like system prompt fragments
@@ -69,32 +66,18 @@ def _postprocess_answer(answer):
     raw_lines = [line.strip() for line in text.splitlines()]
 
     lines = []
-    seen_sentences = []
-    seen_titles = set()
-    saw_summary = False
+    seen_sentences = set()
     for line in raw_lines:
         if not line:
             if lines and lines[-1]:
                 lines.append("")
             continue
-        if _is_repeated_title(line, seen_titles):
-            continue
         cleaned = _dedupe_sentences(line, seen_sentences)
         if not cleaned:
             continue
         lines.append(cleaned)
-        if cleaned.startswith("总结："):
-            saw_summary = True
-            break
 
-    text = "\n".join(lines).strip()
-    if saw_summary:
-        text = _keep_first_summary(text)
-    elif not _has_summary_line(text):
-        summary = _build_fallback_summary(text)
-        text = text.rstrip("。；;，, \n")
-        text = "{}\n总结：{}".format(text, summary)
-    return text
+    return "\n".join(lines).strip()
 
 
 def _filter_instruction_leakage(text):
@@ -129,31 +112,15 @@ def _filter_instruction_leakage(text):
     return "\n".join(filtered).strip()
 
 
-def _has_summary_line(text):
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    return bool(lines and lines[-1].startswith("总结："))
-
-
-def _is_repeated_title(line, seen_titles):
-    title = line.strip()
-    if not re.fullmatch(r"[一二三四五六七八九十\d、.．\s-]*[\u4e00-\u9fffA-Za-z/]{2,12}[:：]", title):
-        return False
-    key = re.sub(r"[\s\d一二三四五六七八九十、.．-]+", "", title)
-    if key in seen_titles:
-        return True
-    seen_titles.add(key)
-    return False
-
-
 def _dedupe_sentences(line, seen_sentences):
     pieces = _split_sentences(line)
     kept = []
     for piece in pieces:
         key = _sentence_key(piece)
-        if key and _is_seen_sentence(key, seen_sentences):
+        if key and key in seen_sentences:
             continue
         if key:
-            seen_sentences.append(key)
+            seen_sentences.add(key)
         kept.append(piece)
     return "".join(kept).strip()
 
@@ -164,64 +131,15 @@ def _split_sentences(line):
 
 def _sentence_key(sentence):
     sentence = sentence.strip()
-    if len(sentence) < 14 or _looks_like_formula(sentence):
+    if len(sentence) < 10 or _looks_like_formula(sentence):
         return ""
     key = re.sub(r"^[\d一二三四五六七八九十、.．\s-]+", "", sentence)
     key = re.sub(r"^[\u4e00-\u9fffA-Za-z/]{2,8}[:：]", "", key)
     key = re.sub(r"[，,。；;：:\s（）()、\"'“”‘’]", "", key.lower())
-    if len(key) < 10:
+    if len(key) < 8:
         return ""
     return key
 
 
-def _is_seen_sentence(key, seen_sentences):
-    # Fast path: O(1) exact match lookup
-    if not hasattr(_is_seen_sentence, "_exact_set"):
-        _is_seen_sentence._exact_set = set()
-    exact_set = _is_seen_sentence._exact_set
-    if key in exact_set:
-        return True
-
-    # Slow path: substring containment and fuzzy matching
-    for old_key in seen_sentences:
-        short, long = sorted((key, old_key), key=len)
-        if len(short) >= 16 and short in long:
-            return True
-        # Only run expensive SequenceMatcher when lengths are within 30%
-        len_ratio = len(short) / max(len(long), 1)
-        if len_ratio >= 0.7 and SequenceMatcher(None, key, old_key).ratio() >= 0.94:
-            return True
-
-    exact_set.add(key)
-    # Keep seen_sentences list capped to avoid unbounded growth
-    if len(seen_sentences) > 60:
-        seen_sentences[:] = seen_sentences[-40:]
-    return False
-
-
 def _looks_like_formula(sentence):
-    return bool(re.search(r"[=+\-*/^∑Σ√≤≥<>]|\\frac|\\sum", sentence))
-
-
-def _keep_first_summary(text):
-    lines = []
-    for line in text.splitlines():
-        lines.append(line)
-        if line.strip().startswith("总结："):
-            break
-    return "\n".join(lines).strip()
-
-
-def _build_fallback_summary(text):
-    lines = [line.strip() for line in text.splitlines() if line.strip()]
-    # Skip title-only lines and instruction fragments
-    for line in reversed(lines):
-        candidate = re.sub(r"^[一二三四五六七八九十\d、.．\s-]+", "", line)
-        candidate = re.sub(r"^[\u4e00-\u9fffA-Za-z/]{2,8}[:：]", "", candidate).strip()
-        candidate = candidate.rstrip("。；;，, ")
-        # Filter out likely instruction leakage fragments
-        if re.match(r"^(回答规则|课程范围|格式|禁止|最后|你是)", candidate):
-            continue
-        if len(candidate) >= 12 and candidate not in ("总结", "归纳", "结论"):
-            return candidate
-    return ""
+    return bool(re.search(r"[=+\-*/^∑Σ√≤≥<>]|\\frac|\\sum|_[{a-zA-Z0-9]", sentence))

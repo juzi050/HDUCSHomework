@@ -26,11 +26,8 @@ def build_prompt(question, rag_context=None, system_prompt=None):
     # Inject RAG context as a second system message for course grounding.
     if rag_context:
         context_text = _format_rag_context(rag_context)
-        rag_message = (
-            "【资料】以下片段优先级高于通用知识。请基于资料推理归纳，"
-            "提取与问题直接相关的公式、数值和术语组织回答；"
-            "勿复述无关片段或编造细节。务必在末尾给出总结。\n\n"
-            "{}".format(context_text)
+        rag_message = "【资料】优先使用下列片段，提取相关术语、公式和数值，避免复述无关内容。\n\n{}".format(
+            context_text
         )
         messages.append({"role": "system", "content": rag_message})
 
@@ -53,12 +50,12 @@ def _format_location(doc):
     page_end = doc.get("page_end")
     section = doc.get("section")
 
-    details = ["来源: {}".format(source)]
+    details = [source]
     if page_start:
         if page_end and page_end != page_start:
-            details.append("页码: {}-{}".format(page_start, page_end))
+            details.append("p{}-{}".format(page_start, page_end))
         else:
-            details.append("页码: {}".format(page_start))
+            details.append("p{}".format(page_start))
     if section:
-        details.append("章节: {}".format(section))
-    return " ".join(details)
+        details.append(section)
+    return "/".join(details)

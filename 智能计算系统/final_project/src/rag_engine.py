@@ -69,6 +69,9 @@ DOMAIN_KEYWORDS = [
     "学习率", "learning rate", "学习率调度",
     "超参数", "hyperparameter", "alpha", "beta", "α", "β",
     "提高精度", "网络结构", "修改网络结构", "不改变网络结构",
+    "精度不够", "准确率低", "效果不好", "效果较差",
+    "训练不收敛", "loss不下降", "损失不下降", "验证集",
+    "训练集", "测试集", "泛化", "过拟合", "欠拟合",
     "功能调试", "精度调试", "正确性验证", "定位错误",
     # Deep learning processors
     "深度学习处理器", "TPU", "GPU", "DLP",
@@ -150,6 +153,11 @@ TOPIC_PROFILES = {
         "query": ["调试", "调优", "性能", "精度", "梯度检查", "混合精度", "算子融合", "内存优化"],
         "doc": ["功能调试", "精度调试", "性能调优", "梯度检查", "算子融合", "混合精度", "内存优化", "数据加载"],
         "sources": ["textbook_v2", "advanced_topics.txt"],
+    },
+    "training_diagnosis": {
+        "query": ["精度不够", "准确率低", "效果不好", "调参", "调优", "过拟合", "欠拟合", "学习率", "泛化", "不收敛"],
+        "doc": ["提高神经网络精度", "数据增强", "正则化", "学习率调度", "优化器", "权重初始化", "过拟合小数据集测试", "梯度检查", "过拟合", "欠拟合"],
+        "sources": ["dl_fundamentals.txt", "advanced_topics.txt"],
     },
     "framework": {
         "query": ["PyTorch", "TensorFlow", "编程框架", "计算图", "动态图", "静态图", "算子", "分布式训练"],
@@ -308,21 +316,23 @@ class RAGEngine:
         found_keywords = self._extract_keywords(question)
         found_phrases = self._extract_question_phrases(question)
         found_topics = self._detect_topics(question)
+        query_compact = self._compact_text(question)
         if not query_terms and not found_keywords:
             return []
 
         candidates = []
         for doc in self.documents:
             relevance = self._compute_relevance(
-                query_terms, found_keywords, found_phrases, found_topics, doc
+                query_terms, found_keywords, found_phrases, found_topics, query_compact, doc
             )
             if relevance > 0:
                 candidates.append((relevance, doc))
 
         candidates.sort(key=lambda item: item[0], reverse=True)
-        return self._build_results(candidates, context_count)
+        anchors = self._build_context_anchors(query_terms, found_keywords, found_phrases)
+        return self._build_results(candidates, context_count, anchors)
 
-    def _compute_relevance(self, query_terms, found_keywords, found_phrases, found_topics, doc):
+    def _compute_relevance(self, query_terms, found_keywords, found_phrases, found_topics, query_compact, doc):
         relevance = 0.0
         k1 = 1.4
         b = 0.75
@@ -350,6 +360,12 @@ class RAGEngine:
                 relevance += 3.0 + min(len(phrase), 12) * 0.25
 
         relevance += self._topic_bonus(found_topics, doc)
+        if self._should_deprioritize_low_level_debug(query_compact, found_topics, doc):
+            relevance *= 0.35
+        elif self._should_deprioritize_training_textbook(query_compact, found_topics, doc):
+            relevance *= 0.75
+        elif self._should_deprioritize_experiment_note(found_topics, doc):
+            relevance *= 0.65
         return relevance * doc.get("weight", 1.0)
 
     def _detect_topics(self, text):
@@ -373,7 +389,7 @@ class RAGEngine:
         for topic in found_topics:
             profile = TOPIC_PROFILES[topic]
             if source in profile.get("sources", []):
-                bonus += 3.0
+                bonus += 8.0 if topic == "training_diagnosis" else 3.0
             hits = 0
             for marker in profile["doc"]:
                 marker_compact = self._compact_text(marker)
@@ -383,20 +399,67 @@ class RAGEngine:
                 bonus += min(4.0, 1.2 + hits * 0.6)
         return bonus
 
-    def _build_results(self, candidates, context_count):
+    def _should_deprioritize_low_level_debug(self, query_compact, found_topics, doc):
+        if not {"debug_tuning", "training_diagnosis"}.intersection(found_topics):
+            return False
+        if self._low_level_debug_requested(query_compact):
+            return False
+        doc_compact = doc["compact"]
+        low_level_markers = [
+            "focus命令", "break命令", "调试线程", "指令地址",
+            "__vector", "float2half", "half2float", "devicecluster",
+        ]
+        return any(marker in doc_compact for marker in low_level_markers)
+
+    def _should_deprioritize_training_textbook(self, query_compact, found_topics, doc):
+        if "training_diagnosis" not in found_topics:
+            return False
+        if self._low_level_debug_requested(query_compact):
+            return False
+        return doc.get("source") == "textbook_v2"
+
+    def _should_deprioritize_experiment_note(self, found_topics, doc):
+        if "training_diagnosis" not in found_topics:
+            return False
+        if {"style_transfer", "rnn"}.intersection(found_topics):
+            return False
+        return doc.get("source") in {"style_transfer.txt", "rnn_experiment.txt"}
+
+    def _low_level_debug_requested(self, query_compact):
+        request_markers = [
+            "bcl", "调试命令", "断点", "break", "focus", "watch",
+            "指令地址", "线程切换", "__vector", "float2half", "half2float",
+        ]
+        return any(marker in query_compact for marker in request_markers)
+
+    def _build_context_anchors(self, query_terms, found_keywords, found_phrases):
+        anchors = list(found_keywords)
+        anchors.extend(sorted(found_phrases, key=len, reverse=True)[:20])
+        anchors.extend(term for term in query_terms if len(term) >= 2)
+        seen = set()
+        deduped = []
+        for anchor in sorted(anchors, key=len, reverse=True):
+            key = self._compact_text(anchor)
+            if key and key not in seen:
+                seen.add(key)
+                deduped.append(anchor)
+        return deduped
+
+    def _build_results(self, candidates, context_count, anchors=None):
         results = []
         used_chars = 0
         seen = set()
         source_without_page_counts = Counter()
+        anchors = anchors or []
 
         for _, doc in candidates:
             if len(results) >= context_count or used_chars >= MAX_RAG_TOTAL_CHARS:
                 break
 
-            text = doc["text"]
+            full_text = doc["text"]
             source = doc["source"]
             page_start = doc.get("page_start")
-            dedupe_key = (doc["source"], doc.get("page_start"), text[:80])
+            dedupe_key = (doc["source"], doc.get("page_start"), full_text[:80])
             if dedupe_key in seen:
                 continue
 
@@ -410,9 +473,7 @@ class RAGEngine:
             limit = min(MAX_RAG_CHARS, remaining)
             if limit <= 120:
                 break
-            if len(text) > limit:
-                suffix = "..."
-                text = text[:limit - len(suffix)].rstrip() + suffix
+            text = self._trim_text_around_anchor(full_text, limit, anchors)
 
             used_chars += len(text)
             if page_start is None:
@@ -426,6 +487,43 @@ class RAGEngine:
             })
 
         return results
+
+    def _trim_text_around_anchor(self, text, limit, anchors):
+        if len(text) <= limit:
+            return text
+
+        anchor_pos = self._find_anchor_position(text, anchors)
+        if anchor_pos < 0:
+            return text[:limit - 3].rstrip() + "..."
+
+        prefix = "..." if anchor_pos > 0 else ""
+        suffix = "..."
+        body_limit = max(limit - len(prefix) - len(suffix), 80)
+        start = max(0, anchor_pos - body_limit // 3)
+        end = min(len(text), start + body_limit)
+        if end - start < body_limit:
+            start = max(0, end - body_limit)
+        if end >= len(text):
+            suffix = ""
+
+        body = text[start:end].strip()
+        return "{}{}{}".format(prefix, body.rstrip(), suffix)
+
+    def _find_anchor_position(self, text, anchors):
+        haystack = self._normalize_text(text).lower()
+        compact_haystack = self._compact_text(text)
+        for anchor in anchors:
+            needle = self._normalize_text(anchor).lower().strip()
+            if len(needle) < 2:
+                continue
+            pos = haystack.find(needle)
+            if pos >= 0:
+                return pos
+            compact_needle = self._compact_text(anchor)
+            compact_pos = compact_haystack.find(compact_needle)
+            if compact_pos >= 0:
+                return min(compact_pos, max(len(text) - 1, 0))
+        return -1
 
     def _extract_keywords(self, text):
         """Extract course keywords found in the question."""
