@@ -1,0 +1,1129 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>LobeHub 多智能体架构与群聊调度分析</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --paper: #ffffff;
+      --ink: #1d232c;
+      --muted: #667085;
+      --line: #d8dee8;
+      --blue: #2563eb;
+      --green: #138a63;
+      --orange: #c46a16;
+      --red: #c2413a;
+      --violet: #7c3aed;
+      --cyan: #0e7490;
+      --code: #f1f4f8;
+      --shadow: 0 18px 48px rgba(24, 35, 55, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      background:
+        linear-gradient(180deg, #eef2f7 0, #f6f7f9 280px),
+        var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", "Microsoft YaHei", Arial, sans-serif;
+      line-height: 1.65;
+    }
+
+    main {
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 36px 24px 72px;
+    }
+
+    header {
+      padding: 34px 0 26px;
+    }
+
+    h1 {
+      margin: 0 0 14px;
+      font-size: 38px;
+      line-height: 1.18;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    h2 {
+      margin: 0 0 16px;
+      font-size: 24px;
+      line-height: 1.3;
+      letter-spacing: 0;
+    }
+
+    h3 {
+      margin: 24px 0 10px;
+      font-size: 18px;
+      line-height: 1.35;
+      letter-spacing: 0;
+    }
+
+    p {
+      margin: 0 0 12px;
+    }
+
+    a {
+      color: var(--blue);
+    }
+
+    code {
+      padding: 2px 6px;
+      border-radius: 5px;
+      background: var(--code);
+      color: #253347;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 0.93em;
+    }
+
+    .lead {
+      max-width: 920px;
+      color: #344054;
+      font-size: 17px;
+    }
+
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      margin-top: 18px;
+    }
+
+    .tag {
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: rgba(255, 255, 255, 0.72);
+      padding: 5px 9px;
+      color: #475467;
+      font-size: 13px;
+    }
+
+    section {
+      margin-top: 22px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--paper);
+      box-shadow: var(--shadow);
+      padding: 24px;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 16px;
+    }
+
+    .panel {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fbfcfe;
+      padding: 16px;
+    }
+
+    .panel h3 {
+      margin-top: 0;
+    }
+
+    .summary-list {
+      display: grid;
+      gap: 10px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .summary-list li {
+      position: relative;
+      padding-left: 22px;
+    }
+
+    .summary-list li::before {
+      position: absolute;
+      left: 0;
+      top: 0.62em;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--blue);
+      content: "";
+    }
+
+    .flow {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(150px, 1fr));
+      gap: 18px;
+      margin: 18px 0 10px;
+      align-items: stretch;
+    }
+
+    .flow-step {
+      position: relative;
+      min-height: 126px;
+      border: 1px solid var(--line);
+      border-top: 4px solid var(--blue);
+      border-radius: 8px;
+      background: #fbfcff;
+      padding: 14px 14px 12px;
+    }
+
+    .flow-step::after {
+      position: absolute;
+      top: 50%;
+      right: -16px;
+      width: 14px;
+      height: 2px;
+      background: var(--line);
+      content: "";
+    }
+
+    .flow-step:nth-child(4n)::after,
+    .flow-step:last-child::after {
+      display: none;
+    }
+
+    .flow-step b {
+      display: block;
+      margin-bottom: 7px;
+      color: #101828;
+      font-size: 15px;
+    }
+
+    .flow-step span {
+      display: block;
+      color: var(--muted);
+      font-size: 13px;
+    }
+
+    .swimlane {
+      display: grid;
+      grid-template-columns: 160px 1fr;
+      gap: 0;
+      overflow: hidden;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      margin-top: 18px;
+    }
+
+    .lane-title,
+    .lane-body {
+      border-bottom: 1px solid var(--line);
+      padding: 14px;
+    }
+
+    .lane-title {
+      background: #f2f5f9;
+      color: #344054;
+      font-weight: 700;
+    }
+
+    .lane-body {
+      min-width: 0;
+    }
+
+    .lane-title:last-of-type,
+    .lane-body:last-of-type {
+      border-bottom: 0;
+    }
+
+    .chips {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      border-radius: 6px;
+      background: #fbfcfe;
+      padding: 6px 9px;
+      color: #344054;
+      font-size: 13px;
+      white-space: nowrap;
+    }
+
+    .state-machine {
+      display: grid;
+      grid-template-columns: 1fr 42px 1fr 42px 1fr;
+      gap: 10px;
+      align-items: center;
+      margin-top: 18px;
+    }
+
+    .node {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #ffffff;
+      padding: 14px;
+      min-height: 92px;
+    }
+
+    .node strong {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .node small {
+      display: block;
+      color: var(--muted);
+      line-height: 1.45;
+    }
+
+    .arrow {
+      color: #98a2b3;
+      text-align: center;
+      font-size: 26px;
+      font-weight: 700;
+    }
+
+    .decision-grid {
+      display: grid;
+      grid-template-columns: repeat(5, minmax(0, 1fr));
+      gap: 10px;
+      margin-top: 16px;
+    }
+
+    .decision {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: #fcfcfd;
+      min-height: 116px;
+    }
+
+    .decision b {
+      display: block;
+      margin-bottom: 6px;
+    }
+
+    .decision p {
+      margin: 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .decision.blue { border-top: 4px solid var(--blue); }
+    .decision.green { border-top: 4px solid var(--green); }
+    .decision.orange { border-top: 4px solid var(--orange); }
+    .decision.violet { border-top: 4px solid var(--violet); }
+    .decision.cyan { border-top: 4px solid var(--cyan); }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 12px;
+      font-size: 14px;
+    }
+
+    th,
+    td {
+      border-bottom: 1px solid var(--line);
+      padding: 10px 11px;
+      text-align: left;
+      vertical-align: top;
+    }
+
+    th {
+      background: #f3f6fa;
+      color: #344054;
+      font-weight: 700;
+    }
+
+    tr:last-child td {
+      border-bottom: 0;
+    }
+
+    .note {
+      border-left: 4px solid var(--orange);
+      background: #fff8ed;
+      padding: 12px 14px;
+      color: #49331b;
+      margin-top: 14px;
+      border-radius: 0 8px 8px 0;
+    }
+
+    .ok {
+      border-left-color: var(--green);
+      background: #effaf6;
+      color: #12392d;
+    }
+
+    .risk {
+      border-left-color: var(--red);
+      background: #fff4f3;
+      color: #4b2220;
+    }
+
+    .code-block {
+      overflow: auto;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #0f172a;
+      color: #dbeafe;
+      padding: 14px;
+      font-family: "Cascadia Mono", Consolas, monospace;
+      font-size: 13px;
+      line-height: 1.55;
+      white-space: pre;
+    }
+
+    .path-list {
+      columns: 2;
+      column-gap: 28px;
+      padding-left: 20px;
+    }
+
+    .path-list li {
+      break-inside: avoid;
+      margin: 0 0 7px;
+    }
+
+    @media (max-width: 980px) {
+      .grid-2,
+      .grid-3,
+      .flow,
+      .decision-grid {
+        grid-template-columns: 1fr;
+      }
+
+      .flow-step::after {
+        display: none;
+      }
+
+      .state-machine {
+        grid-template-columns: 1fr;
+      }
+
+      .arrow {
+        transform: rotate(90deg);
+      }
+
+      .swimlane {
+        grid-template-columns: 1fr;
+      }
+
+      .lane-title {
+        border-bottom: 0;
+      }
+
+      .path-list {
+        columns: 1;
+      }
+    }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <h1>LobeHub 多智能体架构与群聊调度分析</h1>
+      <p class="lead">
+        本报告分析 <a href="https://github.com/lobehub/lobehub">lobehub/lobehub</a> 在当前代码中的整体架构、
+        群聊发起链路、多智能体调度模型、Agent 实际运行位置，以及代码正确性通过哪些编译、类型检查、测试和 CI 入口保障。
+      </p>
+      <div class="meta">
+        <span class="tag">仓库：lobehub/lobehub</span>
+        <span class="tag">分析日期：2026-05-24</span>
+        <span class="tag">远程 HEAD：192111840c6ddea30fd6daa13f3844cc44b4a4e2</span>
+        <span class="tag">重点：Group Chat / AgentRuntime / GroupOrchestration</span>
+      </div>
+    </header>
+
+    <section>
+      <h2>一、结论摘要</h2>
+      <ul class="summary-list">
+        <li>
+          LobeHub 是一个 Next.js + React + TypeScript 的 monorepo，核心应用在根目录 <code>src</code>，
+          桌面端在 <code>apps/desktop</code>，通用运行时、内置工具、模型适配和上下文工程放在 <code>packages</code>。
+        </li>
+        <li>
+          群聊发送链路首先从前端 <code>group</code> 页面进入 <code>sendGroupMessage</code>，随后通过 tRPC 调用服务端
+          <code>execGroupAgent</code>，服务端创建 Agent operation，并由队列触发 <code>AgentRuntimeService.executeStep</code> 执行。
+        </li>
+        <li>
+          底层单个 Agent 的运行模型是“状态机 + 指令执行器”：<code>GeneralChatAgent</code> 负责根据上下文决定下一步，
+          <code>AgentRuntime</code> 按指令调用 LLM、工具、人工确认或结束。
+        </li>
+        <li>
+          明确的多智能体群组编排由 <code>GroupOrchestrationRuntime</code> 和 <code>GroupOrchestrationSupervisor</code> 实现。
+          它支持 <code>speak</code>、<code>broadcast</code>、<code>delegate</code>、异步任务和批量异步任务。
+        </li>
+        <li>
+          当前代码中存在两条需要区分的路径：服务端化的群聊主发送路径，以及客户端 store 中的 GroupOrchestration 编排路径。
+          服务端支持 sub-agent 异步任务调度，但 <code>lobe-group-management</code> 的服务端 runtime 注册并不完整，因此不能简单认为所有群管理工具都直接在服务端执行。
+        </li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>二、仓库总体架构</h2>
+      <div class="grid-3">
+        <div class="panel">
+          <h3>应用层</h3>
+          <p>
+            <code>src/routes</code> 承载 SPA 页面和页面级 feature；
+            <code>src/store</code> 使用 Zustand 管理聊天、插件、知识库和运行时状态；
+            <code>src/app</code> 提供 Next.js App Router、API 和服务端入口。
+          </p>
+        </div>
+        <div class="panel">
+          <h3>服务层</h3>
+          <p>
+            <code>src/server</code> 包含 tRPC router、service、数据库模型、Agent runtime service、
+            tool execution service 和队列执行入口。群聊服务端调度主要落在这里。
+          </p>
+        </div>
+        <div class="panel">
+          <h3>能力包</h3>
+          <p>
+            <code>packages/agent-runtime</code> 提供 Agent 状态机核心；
+            <code>packages/model-runtime</code> 适配模型；
+            <code>packages/builtin-tool-*</code> 提供内置工具；
+            <code>packages/builtin-agents</code> 提供内置 Agent。
+          </p>
+        </div>
+      </div>
+
+      <h3>主要模块关系</h3>
+      <div class="flow">
+        <div class="flow-step">
+          <b>UI 与 SPA 路由</b>
+          <span><code>src/routes/(main)/group</code>、聊天输入框、会话列表、消息展示。</span>
+        </div>
+        <div class="flow-step">
+          <b>Zustand Store</b>
+          <span><code>src/store/chat</code> 负责发送消息、运行客户端 Agent、处理 stream event。</span>
+        </div>
+        <div class="flow-step">
+          <b>tRPC / Lambda Router</b>
+          <span><code>src/server/routers/lambda/aiAgent.ts</code> 暴露 <code>execGroupAgent</code>。</span>
+        </div>
+        <div class="flow-step">
+          <b>Server Services</b>
+          <span><code>AiAgentService</code> 创建会话消息和 Agent operation。</span>
+        </div>
+        <div class="flow-step">
+          <b>AgentRuntimeService</b>
+          <span>保存 operation state，调度 step，处理锁、事件、hooks 和 SSE。</span>
+        </div>
+        <div class="flow-step">
+          <b>Agent Runtime Package</b>
+          <span><code>AgentRuntime</code> + <code>GeneralChatAgent</code> 生成并执行下一步指令。</span>
+        </div>
+        <div class="flow-step">
+          <b>Tool Execution</b>
+          <span>服务端工具、客户端工具、桌面本地工具、sub-agent task 都从这里分流。</span>
+        </div>
+        <div class="flow-step">
+          <b>DB / Queue / SSE</b>
+          <span>数据库持久化消息和状态，队列推进 step，SSE 推送运行结果。</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>三、发起群聊时的调度链路</h2>
+      <p>
+        用户在群聊页面输入消息后，默认聊天发送逻辑会被群聊 hook 接管。核心入口是
+        <code>src/routes/(main)/group/features/Conversation/useGroupHooks.ts</code>，
+        它在 <code>onBeforeSendMessage</code> 中调用 <code>sendGroupMessage</code> 并返回 <code>false</code>，
+        从而阻止普通单聊的 <code>sendMessage</code> 流程。
+      </p>
+
+      <div class="swimlane">
+        <div class="lane-title">浏览器 UI</div>
+        <div class="lane-body">
+          <div class="chips">
+            <span class="chip">ChatInput</span>
+            <span class="chip">useGroupHooks.onBeforeSendMessage</span>
+            <span class="chip">useChatStore.sendGroupMessage</span>
+          </div>
+          <p>
+            前端先创建临时 user message 和 assistant loading message，保证界面立即进入发送中状态。
+          </p>
+        </div>
+
+        <div class="lane-title">tRPC 调用</div>
+        <div class="lane-body">
+          <div class="chips">
+            <span class="chip">lambdaClient.aiAgent.execGroupAgent.mutate</span>
+            <span class="chip">groupId</span>
+            <span class="chip">topicId</span>
+            <span class="chip">agentId</span>
+          </div>
+          <p>
+            前端把群组、话题、主 agent、用户消息和文件传给服务端。服务端返回真实消息列表、话题信息、assistant message id 和 operation id。
+          </p>
+        </div>
+
+        <div class="lane-title">服务端创建 operation</div>
+        <div class="lane-body">
+          <div class="chips">
+            <span class="chip">AiAgentService.execGroupAgent</span>
+            <span class="chip">AiAgentService.execAgent</span>
+            <span class="chip">AgentRuntimeService.createOperation</span>
+          </div>
+          <p>
+            如果没有 topic，会先创建 topic。随后服务端写入 user/assistant 消息，并创建一个 Agent operation。
+            operation 的 metadata 会带上 <code>groupId</code>、<code>topicId</code>、agent 配置、模型配置、工具集合和工作目录等上下文。
+          </p>
+        </div>
+
+        <div class="lane-title">队列执行 step</div>
+        <div class="lane-body">
+          <div class="chips">
+            <span class="chip">queueService.scheduleMessage</span>
+            <span class="chip">/run</span>
+            <span class="chip">AgentRuntimeService.executeStep</span>
+          </div>
+          <p>
+            <code>autoStart</code> 为 true 时，服务端会把 operation 放入队列。执行时先通过 <code>tryClaimStep</code> 加锁，
+            防止同一 step 被重复执行，再加载状态并进入 <code>AgentRuntime.step</code>。
+          </p>
+        </div>
+
+        <div class="lane-title">运行时执行</div>
+        <div class="lane-body">
+          <div class="chips">
+            <span class="chip">GeneralChatAgent</span>
+            <span class="chip">RuntimeExecutors.call_llm</span>
+            <span class="chip">RuntimeExecutors.call_tool</span>
+            <span class="chip">RuntimeExecutors.exec_sub_agent</span>
+          </div>
+          <p>
+            <code>GeneralChatAgent</code> 决定下一步是调用模型、执行工具、请求人工确认、执行 sub-agent，还是结束。
+            服务端 executor 执行后保存新状态，并在需要继续时再次入队下一步。
+          </p>
+        </div>
+
+        <div class="lane-title">前端同步</div>
+        <div class="lane-body">
+          <div class="chips">
+            <span class="chip">agentRuntimeClient.createStreamConnection</span>
+            <span class="chip">internal_handleAgentStreamEvent</span>
+            <span class="chip">operationId</span>
+          </div>
+          <p>
+            前端拿到 operation id 后建立 SSE 连接，流式接收 step、LLM chunk、工具结果、完成或错误事件，并同步消息 UI。
+          </p>
+        </div>
+      </div>
+
+      <h3>群聊主发送链路图</h3>
+      <div class="flow">
+        <div class="flow-step">
+          <b>1. 用户输入</b>
+          <span><code>group/features/Conversation/MainChatInput</code> 中提交消息。</span>
+        </div>
+        <div class="flow-step">
+          <b>2. 前端拦截</b>
+          <span><code>useGroupHooks</code> 调 <code>sendGroupMessage</code>，不走普通单聊。</span>
+        </div>
+        <div class="flow-step">
+          <b>3. 乐观消息</b>
+          <span>创建临时 user 与 assistant loading message。</span>
+        </div>
+        <div class="flow-step">
+          <b>4. 服务端 mutation</b>
+          <span><code>execGroupAgent</code> 写入真实消息并创建 operation。</span>
+        </div>
+        <div class="flow-step">
+          <b>5. 队列调度</b>
+          <span><code>scheduleMessage</code> 延迟触发 <code>/run</code>。</span>
+        </div>
+        <div class="flow-step">
+          <b>6. 单步执行</b>
+          <span><code>executeStep</code> 加锁、加载状态、执行 runtime。</span>
+        </div>
+        <div class="flow-step">
+          <b>7. 继续或完成</b>
+          <span>需要继续则再次入队；完成则触发 hooks 和 finish 事件。</span>
+        </div>
+        <div class="flow-step">
+          <b>8. SSE 回传</b>
+          <span>前端按 stream event 更新消息、工具调用和运行状态。</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>四、单个 Agent 的运行机制</h2>
+      <p>
+        <code>packages/agent-runtime/src/core/runtime.ts</code> 中的 <code>AgentRuntime</code> 是执行引擎，
+        <code>packages/agent-runtime/src/agents/GeneralChatAgent.ts</code> 是默认决策 Agent。
+        这个设计把“决定下一步做什么”和“具体怎么执行”拆开：前者由 Agent 的 runner 完成，后者由 executor 完成。
+      </p>
+
+      <div class="state-machine">
+        <div class="node">
+          <strong>State + Context</strong>
+          <small>包含 messages、metadata、tools、stepCount、status、pending tool call 等。</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node">
+          <strong>GeneralChatAgent.runner</strong>
+          <small>根据上一步结果决定 <code>call_llm</code>、<code>call_tool</code>、<code>finish</code> 等指令。</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node">
+          <strong>Runtime Executor</strong>
+          <small>调用模型、工具、人工确认、sub-agent task，并生成新的 context。</small>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>输入上下文</th>
+            <th>GeneralChatAgent 常见决策</th>
+            <th>结果</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>init</code> 或 <code>user_input</code></td>
+            <td>生成 <code>call_llm</code></td>
+            <td>进入模型调用，等待 LLM 文本或 tool calls。</td>
+          </tr>
+          <tr>
+            <td><code>llm_result</code> 且包含 tool calls</td>
+            <td>生成 <code>call_tool</code> 或 <code>call_tools_batch</code>，必要时插入人工确认。</td>
+            <td>工具执行完成后再回到 LLM，让模型整合结果。</td>
+          </tr>
+          <tr>
+            <td><code>tool_result</code> 或 <code>tools_batch_result</code></td>
+            <td>通常继续 <code>call_llm</code>。</td>
+            <td>让模型基于工具结果回复、继续拆解任务或结束。</td>
+          </tr>
+          <tr>
+            <td>工具结果声明 <code>execSubAgent</code>、<code>execSubAgents</code> 等状态</td>
+            <td>生成 <code>exec_sub_agent</code> 或 <code>exec_sub_agents</code>。</td>
+            <td>父 agent 启动一个或多个子 agent task，完成后再汇总。</td>
+          </tr>
+          <tr>
+            <td>达到最大 step、用户取消、人工等待或显式 finish</td>
+            <td>结束或中断。</td>
+            <td>operation 状态进入 done、error、interrupted 或 waiting。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>五、多智能体群组编排</h2>
+      <p>
+        多智能体群组编排的核心在 <code>packages/agent-runtime/src/groupOrchestration</code>。
+        它并不是把所有 agent 放到一个大 prompt 中一次性回答，而是用 supervisor 决策下一步，让某个 agent 发言、
+        多个 agent 并行发言、委派给某个 agent，或把任务拆成异步子任务。
+      </p>
+
+      <h3>Supervisor 状态机</h3>
+      <div class="state-machine">
+        <div class="node">
+          <strong>init / 上一步结果</strong>
+          <small>例如用户消息、某个 agent 发言、多个任务完成。</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node">
+          <strong>call_supervisor</strong>
+          <small>Supervisor agent 使用群管理工具表达决策。</small>
+        </div>
+        <div class="arrow">→</div>
+        <div class="node">
+          <strong>执行决策</strong>
+          <small><code>speak</code>、<code>broadcast</code>、<code>delegate</code>、异步任务或 finish。</small>
+        </div>
+      </div>
+
+      <div class="decision-grid">
+        <div class="decision blue">
+          <b>speak</b>
+          <p>让一个指定 agent 顺序发言。适合依赖上一步结果的连续讨论。</p>
+        </div>
+        <div class="decision green">
+          <b>broadcast</b>
+          <p>让多个 agent 并行发言。适合收集独立观点、评审方案或头脑风暴。</p>
+        </div>
+        <div class="decision orange">
+          <b>executeAgentTask</b>
+          <p>把任务交给一个 agent 在独立 thread 中执行，父对话只等待任务结果。</p>
+        </div>
+        <div class="decision violet">
+          <b>executeAgentTasks</b>
+          <p>批量创建多个异步任务，并行等待各自完成，再把结果交回 supervisor。</p>
+        </div>
+        <div class="decision cyan">
+          <b>delegate / finish</b>
+          <p>委派给某个 agent 接管，或 supervisor 判断对话已经完成。</p>
+        </div>
+      </div>
+
+      <h3>客户端 GroupOrchestration 执行路径</h3>
+      <p>
+        <code>src/store/chat/slices/aiAgent/actions/groupOrchestration.ts</code> 提供
+        <code>triggerSpeak</code>、<code>triggerBroadcast</code>、<code>triggerDelegate</code>、
+        <code>triggerExecuteTask</code>、<code>triggerExecuteTasks</code>。
+        这些函数都会构造一个 <code>supervisor_decided</code> 初始结果，然后调用
+        <code>internal_execGroupOrchestration</code> 进入循环。
+      </p>
+
+      <div class="flow">
+        <div class="flow-step">
+          <b>1. 工具 stop</b>
+          <span>Supervisor 调用 group-management 工具，工具返回 <code>stop:true</code>。</span>
+        </div>
+        <div class="flow-step">
+          <b>2. 注册回调</b>
+          <span>工具 executor 用 <code>registerAfterCompletion</code> 注册后续编排动作。</span>
+        </div>
+        <div class="flow-step">
+          <b>3. 当前 runtime 完成</b>
+          <span><code>executeClientAgent</code> 结束后执行 afterCompletion callbacks。</span>
+        </div>
+        <div class="flow-step">
+          <b>4. 触发 orchestration</b>
+          <span>调用 <code>triggerSpeak</code>、<code>triggerBroadcast</code> 或任务触发器。</span>
+        </div>
+        <div class="flow-step">
+          <b>5. 创建编排 runtime</b>
+          <span><code>GroupOrchestrationRuntime</code> + <code>GroupOrchestrationSupervisor</code>。</span>
+        </div>
+        <div class="flow-step">
+          <b>6. 执行对应 executor</b>
+          <span><code>call_agent</code>、<code>parallel_call_agents</code> 或 async task executor。</span>
+        </div>
+        <div class="flow-step">
+          <b>7. 回到 supervisor</b>
+          <span>若未跳过 supervisor 且未超过 <code>maxRounds</code>，继续下一轮。</span>
+        </div>
+        <div class="flow-step">
+          <b>8. 完成 operation</b>
+          <span>调用 <code>completeOperation</code>，失败则 <code>failOperation</code>。</span>
+        </div>
+      </div>
+
+      <table>
+        <thead>
+          <tr>
+            <th>GroupOrchestration 指令</th>
+            <th>主要 executor</th>
+            <th>实际行为</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><code>call_supervisor</code></td>
+            <td><code>createGroupOrchestrationExecutors.call_supervisor</code></td>
+            <td>调用 supervisor agent，让它基于当前群聊消息选择下一步；如果没有工具调用，默认结束。</td>
+          </tr>
+          <tr>
+            <td><code>call_agent</code></td>
+            <td><code>call_agent</code></td>
+            <td>给指定 agent 注入可选 supervisor 指令，再用 <code>executeClientAgent</code> 让它发言。</td>
+          </tr>
+          <tr>
+            <td><code>parallel_call_agents</code></td>
+            <td><code>parallel_call_agents</code></td>
+            <td>用 <code>Promise.all</code> 并行运行多个 agent，默认可关闭工具，适合并行收集观点。</td>
+          </tr>
+          <tr>
+            <td><code>exec_async_task</code></td>
+            <td><code>exec_async_task</code></td>
+            <td>创建 task message，并调用服务端 <code>execSubAgentTask</code> 在独立 thread 中运行子 agent。</td>
+          </tr>
+          <tr>
+            <td><code>exec_client_async_task</code></td>
+            <td><code>exec_client_async_task</code></td>
+            <td>桌面或本地工具场景下，在客户端创建 thread 并运行子 agent，适合访问本地文件和命令。</td>
+          </tr>
+          <tr>
+            <td><code>batch_exec_async_tasks</code></td>
+            <td><code>batch_exec_async_tasks</code></td>
+            <td>并行创建多个 task message 和子任务，轮询所有任务状态，全部完成后返回批量结果。</td>
+          </tr>
+          <tr>
+            <td><code>delegate</code></td>
+            <td><code>delegate</code></td>
+            <td>直接把后续回答交给指定 agent，不再由 supervisor 循环协调。</td>
+          </tr>
+          <tr>
+            <td><code>finish</code></td>
+            <td><code>finish</code></td>
+            <td>编排结束，operation 标记完成。</td>
+          </tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section>
+      <h2>六、服务端 sub-agent 任务调度</h2>
+      <p>
+        服务端的子智能体任务由 <code>AiAgentService.execSubAgentTask</code> 创建。它会为子 agent 新建一个
+        <code>ThreadType.Isolation</code> 的 thread，写入 processing 状态，再调用 <code>execAgent</code> 创建独立 operation。
+        这个子 operation 与父对话通过 <code>parentOperationId</code>、<code>sourceMessageId</code>、task message 和 thread metadata 关联。
+      </p>
+
+      <div class="flow">
+        <div class="flow-step">
+          <b>1. 父 agent 触发任务</b>
+          <span>工具结果包含 <code>execSubAgent</code> 或群编排执行 <code>executeAgentTask</code>。</span>
+        </div>
+        <div class="flow-step">
+          <b>2. 创建 task message</b>
+          <span>父群聊中出现一个 <code>role: task</code> 占位消息。</span>
+        </div>
+        <div class="flow-step">
+          <b>3. 创建 isolation thread</b>
+          <span><code>threadModel.create</code> 写入 <code>agentId</code>、<code>groupId</code>、<code>topicId</code>。</span>
+        </div>
+        <div class="flow-step">
+          <b>4. 启动子 operation</b>
+          <span><code>execAgent</code> 使用子 agent 配置和任务 instruction。</span>
+        </div>
+        <div class="flow-step">
+          <b>5. 队列独立运行</b>
+          <span>子 agent 在服务端 AgentRuntime 中按 step 独立推进。</span>
+        </div>
+        <div class="flow-step">
+          <b>6. 状态回写</b>
+          <span>完成后把最后 assistant 内容写回 task message，并更新 thread status。</span>
+        </div>
+        <div class="flow-step">
+          <b>7. 父流程观察结果</b>
+          <span>前端轮询 <code>getSubAgentTaskStatus</code> 或由父 agent 后续 step 汇总。</span>
+        </div>
+        <div class="flow-step">
+          <b>8. 汇总继续</b>
+          <span>Supervisor 或父 agent 基于任务结果决定继续或结束。</span>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>七、Agent 到底运行在哪里</h2>
+      <table>
+        <thead>
+          <tr>
+            <th>运行位置</th>
+            <th>触发场景</th>
+            <th>关键代码</th>
+            <th>说明</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>Next.js 服务端 / 队列 worker</td>
+            <td>群聊主发送、服务端 sub-agent task、服务端工具调用</td>
+            <td><code>src/server/services/agentRuntime/AgentRuntimeService.ts</code></td>
+            <td>operation 状态在服务端持久化，step 由队列推进，SSE 推送给前端。</td>
+          </tr>
+          <tr>
+            <td>浏览器或桌面 renderer</td>
+            <td>客户端 Agent、GroupOrchestration、客户端工具</td>
+            <td><code>src/store/chat/slices/aiChat/actions/streamingExecutor.ts</code></td>
+            <td><code>executeClientAgent</code> 在前端 store 中运行 runtime 循环，执行完成后触发 afterCompletion 编排回调。</td>
+          </tr>
+          <tr>
+            <td>桌面客户端本地环境</td>
+            <td>需要访问本地文件、shell、外部 CLI agent 的任务</td>
+            <td><code>apps/desktop/src/main</code> 与 <code>exec_client_async_task</code></td>
+            <td>桌面端可以把某些任务放在本机执行，尤其是本地工具和异构 agent provider。</td>
+          </tr>
+          <tr>
+            <td>独立 sub-agent thread</td>
+            <td><code>executeAgentTask</code>、<code>executeAgentTasks</code>、服务端 <code>execSubAgent</code></td>
+            <td><code>AiAgentService.execSubAgentTask</code></td>
+            <td>子 agent 有自己的 thread 和 operation，父对话通过 task message 观察它的结果。</td>
+          </tr>
+          <tr>
+            <td>Gateway / Cloud Sandbox / Tool Server</td>
+            <td>远端工具或隔离运行环境</td>
+            <td><code>agentDispatcher.ts</code>、tool execution runtimes</td>
+            <td>代码中保留了网关和云沙箱执行能力，具体运行点取决于 runtime selection 和工具来源。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note risk">
+        <strong>需要注意：</strong>
+        当前仓库里 <code>lobe-group-management</code> 更明确地出现在客户端内置工具执行和 GroupOrchestration 回调链路中。
+        服务端 <code>toolExecution/serverRuntimes</code> 未看到对应 group-management runtime 注册；服务端 builtin tool 若没有 runtime 会抛出未实现错误。
+        因此架构上应区分“服务端主 AgentRuntime 支持群聊和 sub-agent task”与“客户端 GroupOrchestration 负责 group-management 工具驱动的多 agent 编排”。
+      </div>
+    </section>
+
+    <section>
+      <h2>八、关键代码路径</h2>
+      <ul class="path-list">
+        <li><code>src/routes/(main)/group/features/Conversation/MainChatInput/index.tsx</code>：群聊输入框。</li>
+        <li><code>src/routes/(main)/group/features/Conversation/useGroupHooks.ts</code>：拦截群聊发送。</li>
+        <li><code>src/store/chat/slices/aiAgent/actions/agentGroup.ts</code>：<code>sendGroupMessage</code>，连接服务端 operation 和 SSE。</li>
+        <li><code>src/server/routers/lambda/aiAgent.ts</code>：tRPC <code>execGroupAgent</code> 入口。</li>
+        <li><code>src/server/services/aiAgent/index.ts</code>：<code>execGroupAgent</code>、<code>execAgent</code>、<code>execSubAgentTask</code>。</li>
+        <li><code>src/server/services/agentRuntime/AgentRuntimeService.ts</code>：服务端 operation 创建和 step 执行。</li>
+        <li><code>src/server/modules/AgentRuntime/RuntimeExecutors.ts</code>：服务端 executor，工具、sub-agent、finish 等。</li>
+        <li><code>packages/agent-runtime/src/core/runtime.ts</code>：通用 AgentRuntime step 循环。</li>
+        <li><code>packages/agent-runtime/src/agents/GeneralChatAgent.ts</code>：默认 Agent 决策逻辑。</li>
+        <li><code>packages/agent-runtime/src/groupOrchestration/GroupOrchestrationRuntime.ts</code>：群组编排 runtime。</li>
+        <li><code>packages/agent-runtime/src/groupOrchestration/GroupOrchestrationSupervisor.ts</code>：群组 supervisor 状态机。</li>
+        <li><code>src/store/chat/slices/aiAgent/actions/groupOrchestration.ts</code>：客户端群组编排 action。</li>
+        <li><code>src/store/chat/agents/GroupOrchestration/createGroupOrchestrationExecutors.ts</code>：群组编排 executor。</li>
+        <li><code>packages/builtin-tool-group-management/src/manifest.ts</code>：群管理工具定义。</li>
+        <li><code>packages/builtin-tool-group-management/src/executor.ts</code>：工具回调注册与 stop 行为。</li>
+        <li><code>packages/builtin-agents/src/agents/group-supervisor</code>：内置 group supervisor agent。</li>
+      </ul>
+    </section>
+
+    <section>
+      <h2>九、在哪里编译与验证正确性</h2>
+      <p>
+        代码正确性主要由本地脚本和 GitHub Actions 两层保障。根目录 <code>package.json</code> 提供 build、lint、type-check、
+        vitest 和 e2e 入口；CI 中再按 packages、app、desktop、database、e2e 等维度拆分执行。
+      </p>
+
+      <table>
+        <thead>
+          <tr>
+            <th>验证类型</th>
+            <th>命令或位置</th>
+            <th>作用</th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td>生产构建</td>
+            <td><code>bun run build</code></td>
+            <td>依次执行 <code>build:spa</code>、复制 SPA 产物、<code>build:next</code>，覆盖 Vite SPA 和 Next.js 构建。</td>
+          </tr>
+          <tr>
+            <td>SPA 构建</td>
+            <td><code>build:spa:raw</code> → <code>vite build</code></td>
+            <td>验证前端 SPA bundle 是否能正确编译。</td>
+          </tr>
+          <tr>
+            <td>Next.js 构建</td>
+            <td><code>build:next:raw</code> → <code>next build</code></td>
+            <td>验证 App Router、服务端代码和 Next 产物。</td>
+          </tr>
+          <tr>
+            <td>类型检查</td>
+            <td><code>bun run type-check</code> 或 <code>bun run type-check:tsc</code></td>
+            <td>分别通过 <code>tsgo --noEmit</code> 或 <code>tsc --noEmit</code> 检查 TypeScript 类型。</td>
+          </tr>
+          <tr>
+            <td>Lint</td>
+            <td><code>bun run lint</code></td>
+            <td>组合执行 TS lint、style lint、type-check 和 circular dependency 检查。</td>
+          </tr>
+          <tr>
+            <td>应用单测</td>
+            <td><code>bun run test-app</code></td>
+            <td>使用 Vitest 运行应用级测试。</td>
+          </tr>
+          <tr>
+            <td>端到端测试</td>
+            <td><code>cd e2e && npm run test</code> 或根目录 <code>bun run e2e</code></td>
+            <td>使用 Playwright 等 e2e 测试真实用户流程。</td>
+          </tr>
+          <tr>
+            <td>CI 单测</td>
+            <td><code>.github/workflows/test.yml</code></td>
+            <td>分 package、app shard、desktop、database 等任务执行测试和类型检查。</td>
+          </tr>
+          <tr>
+            <td>CI e2e</td>
+            <td><code>.github/workflows/e2e.yml</code></td>
+            <td>准备数据库、迁移、构建，再运行 e2e。</td>
+          </tr>
+          <tr>
+            <td>发布前检查</td>
+            <td><code>.github/workflows/release.yml</code></td>
+            <td>发布流程中执行 lint、database coverage 和 app test。</td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="note ok">
+        <strong>开发建议：</strong>
+        仓库 <code>AGENTS.md</code> 中推荐针对变更文件运行窄范围 Vitest，例如
+        <code>bunx vitest run --silent='passed-only' '[file-path]'</code>，再用 <code>bun run type-check</code>
+        做类型兜底。全量测试和 e2e 成本更高，适合提交前或 CI 中运行。
+      </div>
+    </section>
+
+    <section>
+      <h2>十、架构观察</h2>
+      <div class="grid-2">
+        <div class="panel">
+          <h3>优点</h3>
+          <ul>
+            <li>Agent 决策与执行器分层清晰，同一个 <code>AgentRuntime</code> 可在服务端和客户端复用。</li>
+            <li>operation state 持久化后由队列推进，服务端长任务更容易恢复、追踪和流式回传。</li>
+            <li>sub-agent task 使用独立 thread，父子任务边界明确，适合并行和隔离上下文。</li>
+            <li>GroupOrchestration 把群组讨论抽象成 supervisor 状态机，<code>speak</code> 与 <code>broadcast</code> 的语义清楚。</li>
+          </ul>
+        </div>
+        <div class="panel">
+          <h3>需要关注的边界</h3>
+          <ul>
+            <li>群聊主发送路径和客户端 GroupOrchestration 路径并存，阅读代码时容易混淆。</li>
+            <li>group-management 工具的服务端 runtime 注册不完整，纯服务端执行该工具时需要额外桥接或实现。</li>
+            <li>客户端编排依赖 afterCompletion callback，调试时要同时看工具 executor、streamingExecutor 和 orchestration action。</li>
+            <li>批量异步任务依赖轮询状态，任务超时、取消和部分失败处理是后续稳定性重点。</li>
+          </ul>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <h2>十一、简化版总览图</h2>
+      <div class="code-block">用户群聊输入
+  ↓
+useGroupHooks 拦截
+  ↓
+sendGroupMessage 创建临时消息并调用 tRPC
+  ↓
+AiAgentService.execGroupAgent
+  ↓
+AgentRuntimeService.createOperation
+  ↓
+Queue /run → AgentRuntimeService.executeStep
+  ↓
+GeneralChatAgent 决策
+  ├─ call_llm：调用模型
+  ├─ call_tool：服务端工具 / 客户端工具 / 桌面工具
+  ├─ exec_sub_agent：创建 isolation thread 与子 operation
+  └─ finish：结束并回写状态
+  ↓
+SSE stream event
+  ↓
+前端更新群聊消息和 operation 状态
+
+GroupOrchestration 路径：
+Supervisor 调用 group-management 工具
+  ↓
+工具返回 stop:true 并注册 afterCompletion
+  ↓
+executeClientAgent 完成后触发 triggerSpeak / triggerBroadcast / triggerExecuteTask
+  ↓
+GroupOrchestrationRuntime 循环执行对应 executor
+  ↓
+回到 supervisor 或完成群聊编排</div>
+    </section>
+  </main>
+</body>
+</html>
